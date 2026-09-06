@@ -309,6 +309,29 @@
     </div>
   </div>
 
+  <!-- Modal 4: 取消訂單二次確認彈窗 -->
+  <div id="cancel-confirm-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>⚠️ 確認取消訂單</h3>
+        <button class="close-btn" onclick="app.closeCancelConfirmModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc" style="color: #dc2626; font-weight: 600;">確定要取消這筆點餐紀錄嗎？取消後金額將自動退回您的金庫餘額。</p>
+        <div class="cancel-summary-box" style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-top: 10px;">
+          <div style="font-size: 0.9rem; margin-bottom: 4px;">📅 日期：<strong id="cancel-modal-date">---</strong></div>
+          <div style="font-size: 0.9rem; margin-bottom: 4px;">👤 訂購人：<strong id="cancel-modal-username">---</strong></div>
+          <div style="font-size: 0.9rem; margin-bottom: 4px;">🍱 餐點內容：<span id="cancel-modal-items">---</span></div>
+          <div style="font-size: 1rem; color: #0284c7; font-weight: bold; margin-top: 8px;">💰 退款金額：<strong id="cancel-modal-amount">$0</strong></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="app.closeCancelConfirmModal()">保持訂購</button>
+        <button id="cancel-confirm-submit-btn" class="btn btn-danger" style="background: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">🔴 確定取消訂單</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 

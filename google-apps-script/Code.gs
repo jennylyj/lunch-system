@@ -102,6 +102,67 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "cancelOrder") {
+      var orderId = contents.orderId;
+      var username = contents.username;
+      var orderDate = contents.orderDate;
+      var rawSheet = ss.getSheetByName("raw紀錄");
+      if (!rawSheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ status: "error", message: "Sheet raw紀錄 not found" }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      var data = rawSheet.getDataRange().getValues();
+      var foundRow = -1;
+
+      if (orderId && orderId.indexOf("gas-") === 0) {
+        var rowIdx = parseInt(orderId.replace("gas-", ""), 10);
+        if (rowIdx >= 1 && rowIdx < data.length) {
+          foundRow = rowIdx + 1;
+        }
+      }
+
+      if (foundRow === -1 && username) {
+        for (var i = data.length - 1; i >= 1; i--) {
+          var rUser = String(data[i][1]).trim();
+          var rawDateCol = data[i][4];
+          var rStatus = String(data[i][5] || "已確認");
+          var rDate = "";
+          if (rawDateCol instanceof Date) {
+            rDate = Utilities.formatDate(rawDateCol, "GMT+8", "yyyy-MM-dd");
+          } else if (rawDateCol) {
+            var dateStr = String(rawDateCol).trim().replace(/\//g, '-');
+            var parts = dateStr.split('-');
+            if (parts.length === 3) {
+              rDate = parts[0] + '-' + String(parts[1]).padStart(2, '0') + '-' + String(parts[2]).padStart(2, '0');
+            } else {
+              rDate = dateStr;
+            }
+          }
+
+          var dateMatches = !orderDate || rDate === orderDate;
+          var notYetCancelled = rStatus !== "已取消";
+
+          if (rUser === username && dateMatches && notYetCancelled) {
+            foundRow = i + 1;
+            break;
+          }
+        }
+      }
+
+      if (foundRow !== -1) {
+        rawSheet.getRange(foundRow, 6).setValue("已取消");
+        return ContentService
+          .createTextOutput(JSON.stringify({ status: "success", message: "Order cancelled successfully", row: foundRow }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      return ContentService
+        .createTextOutput(JSON.stringify({ status: "error", message: "Order row not found" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
@@ -289,6 +350,8 @@ function getAllOrders(ss) {
       formattedDate = Utilities.formatDate(rawTime, "GMT+8", "yyyy-MM-dd");
     }
 
+    var orderStatus = String(row[5] || "已確認");
+
     if (username) {
       var parsedItems = parseDetailsToItems(itemDetails);
       var timeStr = rawTime instanceof Date ? Utilities.formatDate(rawTime, "GMT+8", "HH:mm") : "12:00";
@@ -299,6 +362,7 @@ function getAllOrders(ss) {
         date: formattedDate,
         username: String(username),
         totalPrice: totalPrice,
+        status: orderStatus,
         items: parsedItems
       });
     }

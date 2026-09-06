@@ -302,7 +302,7 @@ class LunchApp {
 
     let totalSpent = 0;
     this.orders.forEach(o => {
-      if (o.username === username) {
+      if (o.username === username && o.status !== "已取消") {
         totalSpent += o.totalPrice;
       }
     });
@@ -671,6 +671,7 @@ class LunchApp {
       date: this.currentSelectedDate,
       username: this.currentUser,
       totalPrice: totalPrice,
+      status: "已確認",
       items: cartItems
     };
 
@@ -748,6 +749,7 @@ class LunchApp {
       date: this.currentSelectedDate,
       username: this.currentUser,
       totalPrice: itemPrice,
+      status: "已確認",
       items: [{ name: itemName, price: itemPrice, qty: 1 }]
     };
 
@@ -799,9 +801,10 @@ class LunchApp {
     container.innerHTML = "";
 
     const dateOrders = this.orders.filter(o => !o.date || o.date === this.currentSelectedDate);
+    const activeOrders = dateOrders.filter(o => o.status !== "已取消");
 
     let totalItemCount = 0;
-    dateOrders.forEach(o => {
+    activeOrders.forEach(o => {
       o.items.forEach(i => totalItemCount += i.qty);
     });
     if (countTag) countTag.textContent = `共 ${totalItemCount} 份餐點`;
@@ -815,9 +818,13 @@ class LunchApp {
       return;
     }
 
+    const dateCheck = checkDateOrderable(this.currentSelectedDate);
+    const currentScheduleItem = findScheduleForDate(this.schedule, this.currentSelectedDate);
+    const isLocked = !dateCheck.orderable || (currentScheduleItem && currentScheduleItem.status === "已截止");
+
     if (this.overviewMode === "by-items") {
       const itemMap = {};
-      dateOrders.forEach(ord => {
+      activeOrders.forEach(ord => {
         ord.items.forEach(it => {
           if (!itemMap[it.name]) {
             itemMap[it.name] = { totalQty: 0, price: it.price, buyers: {} };
@@ -826,6 +833,15 @@ class LunchApp {
           itemMap[it.name].buyers[ord.username] = (itemMap[it.name].buyers[ord.username] || 0) + it.qty;
         });
       });
+
+      if (Object.keys(itemMap).length === 0) {
+        container.innerHTML = `
+          <div class="overview-card" style="text-align: center; color: var(--text-muted); padding: 30px;">
+            🛵 ${this.currentSelectedDate} 無有效訂購餐點 (已取消除外)
+          </div>
+        `;
+        return;
+      }
 
       Object.entries(itemMap).forEach(([itemName, itemInfo]) => {
         const buyersList = Object.entries(itemInfo.buyers).map(([user, q]) => `${user}${q > 1 ? ` x${q}` : ''}`).join("、");
@@ -851,29 +867,56 @@ class LunchApp {
       const personMap = {};
       dateOrders.forEach(ord => {
         if (!personMap[ord.username]) {
-          personMap[ord.username] = { items: [], total: 0 };
+          personMap[ord.username] = { orders: [], activeTotal: 0 };
         }
-        ord.items.forEach(it => {
-          personMap[ord.username].items.push(it);
-          personMap[ord.username].total += it.qty * it.price;
-        });
+        personMap[ord.username].orders.push(ord);
+        if (ord.status !== "已取消") {
+          personMap[ord.username].activeTotal += ord.totalPrice;
+        }
       });
 
       Object.entries(personMap).forEach(([user, data]) => {
         const card = document.createElement("div");
         card.className = "overview-card";
+
+        let ordersHtml = "";
+        data.orders.forEach(ord => {
+          const isCancelled = ord.status === "已取消";
+          const isCurrentUser = user === this.currentUser;
+          const itemsStr = ord.items.map(i => `${i.name} x${i.qty}`).join('、');
+
+          let actionBtnHtml = "";
+          if (isCancelled) {
+            actionBtnHtml = `<span class="badge-order-cancelled">已取消</span>`;
+          } else if (isCurrentUser) {
+            if (isLocked) {
+              actionBtnHtml = `<span class="badge-order-locked">🔒 已截止</span>`;
+            } else {
+              actionBtnHtml = `<button class="btn-cancel-order" onclick="app.showCancelConfirmModal('${ord.id}')">🗑️ 取消</button>`;
+            }
+          }
+
+          ordersHtml += `
+            <div class="person-order-row ${isCancelled ? 'order-row-cancelled' : ''}">
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <span>${itemsStr}</span>
+                ${ord.timestamp ? `<span style="font-size: 0.75rem; color: var(--text-muted);">${ord.timestamp}</span>` : ''}
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 600; ${isCancelled ? 'text-decoration: line-through;' : ''}">$${ord.totalPrice}</span>
+                ${actionBtnHtml}
+              </div>
+            </div>
+          `;
+        });
+
         card.innerHTML = `
           <div class="overview-card-header">
-            <span class="item-name-lg">👤 ${user}</span>
-            <span class="user-balance" style="font-size: 0.9rem;">小計 $${data.total}</span>
+            <span class="item-name-lg">👤 ${user} ${user === this.currentUser ? '<span style="font-size: 0.75rem; color: var(--primary-color); background: var(--primary-light); padding: 2px 6px; border-radius: 10px;">本人</span>' : ''}</span>
+            <span class="user-balance" style="font-size: 0.9rem;">小計 $${data.activeTotal}</span>
           </div>
           <div class="person-orders-list">
-            ${data.items.map(i => `
-              <div class="person-order-row">
-                <span>${i.name} x${i.qty}</span>
-                <span>$${i.qty * i.price}</span>
-              </div>
-            `).join('')}
+            ${ordersHtml}
           </div>
         `;
         container.appendChild(card);
@@ -886,11 +929,11 @@ class LunchApp {
     const restName = restEl ? restEl.textContent : "杏園";
     let text = `🍱 【${restName} - ${this.currentSelectedDate} 點餐統計】\n----------------------------\n`;
 
-    const dateOrders = this.orders.filter(o => !o.date || o.date === this.currentSelectedDate);
+    const activeDateOrders = this.orders.filter(o => (!o.date || o.date === this.currentSelectedDate) && o.status !== "已取消");
 
     if (this.overviewMode === "by-items") {
       const itemMap = {};
-      dateOrders.forEach(ord => {
+      activeDateOrders.forEach(ord => {
         ord.items.forEach(it => {
           if (!itemMap[it.name]) itemMap[it.name] = { qty: 0, buyers: {} };
           itemMap[it.name].qty += it.qty;
@@ -904,7 +947,7 @@ class LunchApp {
       });
     } else {
       const personMap = {};
-      dateOrders.forEach(ord => {
+      activeDateOrders.forEach(ord => {
         if (!personMap[ord.username]) personMap[ord.username] = [];
         ord.items.forEach(it => personMap[ord.username].push(`${it.name} x${it.qty}`));
       });
@@ -924,6 +967,90 @@ class LunchApp {
       console.error(err);
       this.showToast("複製失敗，請手動複製");
     });
+  }
+
+  showCancelConfirmModal(orderId) {
+    if (!this.currentUser) {
+      this.showLoginModal();
+      return;
+    }
+
+    const order = this.orders.find(o => o.id === orderId);
+    if (!order) {
+      this.showToast("⚠️ 找不到該筆訂單！");
+      return;
+    }
+
+    if (order.username !== this.currentUser) {
+      this.showToast("⚠️ 您無權取消他人的訂單！");
+      return;
+    }
+
+    const dateCheck = checkDateOrderable(order.date || this.currentSelectedDate);
+    const currentScheduleItem = findScheduleForDate(this.schedule, order.date || this.currentSelectedDate);
+    const isLocked = !dateCheck.orderable || (currentScheduleItem && currentScheduleItem.status === "已截止");
+
+    if (isLocked) {
+      this.showToast("🔒 該日期已截止點餐，無法取消。");
+      return;
+    }
+
+    const dateEl = document.getElementById("cancel-modal-date");
+    const userEl = document.getElementById("cancel-modal-username");
+    const itemsEl = document.getElementById("cancel-modal-items");
+    const amountEl = document.getElementById("cancel-modal-amount");
+    const submitBtn = document.getElementById("cancel-confirm-submit-btn");
+
+    if (dateEl) dateEl.textContent = order.date || this.currentSelectedDate;
+    if (userEl) userEl.textContent = order.username;
+    if (itemsEl) itemsEl.textContent = order.items.map(i => `${i.name} x${i.qty}`).join("、");
+    if (amountEl) amountEl.textContent = `$${order.totalPrice}`;
+
+    if (submitBtn) {
+      submitBtn.onclick = () => this.confirmCancelOrder(orderId);
+    }
+
+    const modal = document.getElementById("cancel-confirm-modal");
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  closeCancelConfirmModal() {
+    const modal = document.getElementById("cancel-confirm-modal");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  async confirmCancelOrder(orderId) {
+    const order = this.orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    order.status = "已取消";
+    this.saveLocalState();
+
+    this.closeCancelConfirmModal();
+    this.showToast("⏳ 正在更新取消狀態...");
+
+    if (this.gasUrl) {
+      try {
+        await fetch(this.gasUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "cancelOrder",
+            orderId: order.id,
+            username: order.username,
+            orderDate: order.date || this.currentSelectedDate
+          })
+        });
+      } catch (err) {
+        console.warn("GAS cancel order error:", err);
+      }
+    }
+
+    this.updateUserUI();
+    this.renderOverview();
+    this.renderTreasury();
+    this.showToast("✅ 已成功取消訂單！金額已退回您的餘額。");
   }
 
   renderTreasury() {
