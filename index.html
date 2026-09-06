@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>訂餐系統 (含飲食規劃與金庫儲值)</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+  
+  <!-- Main CSS -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Top App Bar / Header -->
+  <header class="app-header">
+    <div class="header-top">
+      <div class="brand">
+        <span class="brand-icon">🍱</span>
+        <div class="brand-info">
+          <h1 id="restaurant-name">台大醫學院 - 杏園</h1>
+          <div class="schedule-status-badge" id="schedule-status-badge">開放點餐中</div>
+        </div>
+      </div>
+      <div class="user-badge" id="user-badge" onclick="app.showLoginModal()">
+        <span class="user-avatar" id="user-avatar">👤</span>
+        <div class="user-info">
+          <span class="user-name" id="display-username">未登入</span>
+          <span class="user-balance" id="display-balance">$0</span>
+        </div>
+        <span class="switch-icon">⇄</span>
+      </div>
+    </div>
+
+    <!-- Date Switcher Bar (飲食規劃連動) -->
+    <div class="date-switcher-bar">
+      <span class="date-switcher-label">📅 日期選單：</span>
+      <div class="date-pills-scroll" id="date-pills-scroll">
+        <!-- Dynamically filled: Today, Tomorrow, Day After, Custom Date -->
+      </div>
+      <input type="date" id="custom-date-picker" onchange="app.onCustomDateSelect(this.value)">
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="order-page" onclick="app.switchTab('order-page')">
+        <span class="tab-icon">🛒</span>今日/預約點餐
+      </button>
+      <button class="tab-btn" data-tab="overview-page" onclick="app.switchTab('overview-page')">
+        <span class="tab-icon">📊</span>當日統計
+      </button>
+      <button class="tab-btn" data-tab="treasury-page" onclick="app.switchTab('treasury-page')">
+        <span class="tab-icon">💰</span>金庫與儲值
+      </button>
+      <button class="tab-btn" data-tab="settings-page" onclick="app.switchTab('settings-page')">
+        <span class="tab-icon">⚙️</span>後端設定
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+
+    <!-- PAGE 1: 今日/預約點餐畫面 -->
+    <section id="order-page" class="page-section active">
+      <!-- Demo Notice Bar -->
+      <div id="demo-banner" class="demo-banner">
+        <span>💡 示範模式中。您正預覽 <strong id="demo-date-label">今日</strong> 對應餐廳。切換頂部日期可預約其他天！</span>
+      </div>
+
+      <!-- Menu Category Tabs -->
+      <div class="category-pills" id="category-pills">
+        <button class="pill active" onclick="app.filterCategory('ALL')">全部</button>
+        <button class="pill" onclick="app.filterCategory('飯類')">飯類/便當</button>
+        <button class="pill" onclick="app.filterCategory('麵類')">麵類/米粉</button>
+        <button class="pill" onclick="app.filterCategory('湯類')">湯類</button>
+      </div>
+
+      <!-- Menu Grid / List -->
+      <div class="menu-list" id="menu-list">
+        <!-- Rendered dynamically by JS -->
+      </div>
+    </section>
+
+    <!-- PAGE 2: 當日便當檢視畫面 -->
+    <section id="overview-page" class="page-section">
+      <div class="overview-header">
+        <div class="section-title">
+          <h2><span id="overview-date-title">今日</span> 訂單統計</h2>
+          <span class="order-count-tag" id="total-orders-tag">共 0 份餐點</span>
+        </div>
+
+        <!-- View Mode Switcher -->
+        <div class="segmented-control">
+          <button id="btn-mode-items" class="segment-btn active" onclick="app.switchOverviewMode('by-items')">
+            📦 依品項 (統計各款數量)
+          </button>
+          <button id="btn-mode-people" class="segment-btn" onclick="app.switchOverviewMode('by-people')">
+            👥 依人名 (統計每人點餐)
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="action-bar">
+        <button class="btn btn-outline" onclick="app.copyOverviewText()">
+          📋 複製文字明細 (發送到點餐群組)
+        </button>
+        <button class="btn btn-secondary" onclick="app.refreshData()">
+          🔄 重新整理資料
+        </button>
+      </div>
+
+      <!-- Overview Content -->
+      <div id="overview-content" class="overview-cards">
+        <!-- Rendered dynamically by JS -->
+      </div>
+    </section>
+
+    <!-- PAGE 3: 金庫與儲值紀錄 -->
+    <section id="treasury-page" class="page-section">
+      <div class="treasury-summary-card">
+        <div class="treasury-card-header">
+          <h2>💰 團體金庫總覽</h2>
+          <button class="btn btn-sm btn-light" onclick="app.showTopUpModal()">➕ 申請儲值</button>
+        </div>
+        <div class="treasury-metrics">
+          <div class="metric-item">
+            <span class="metric-label">您的現在餘額</span>
+            <span class="metric-value my-balance" id="treasury-my-balance">$0</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">您的已確認儲值</span>
+            <span class="metric-value" id="treasury-my-deposit">$0</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">您的累積消費</span>
+            <span class="metric-value" id="treasury-my-spent">$0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <h3>全體成員餘額名冊 (現在餘額 = 儲值已收款 - 消費)</h3>
+      </div>
+
+      <div class="treasury-table-wrapper">
+        <table class="treasury-table">
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>現在餘額</th>
+              <th>已確認儲值</th>
+              <th>累積消費</th>
+            </tr>
+          </thead>
+          <tbody id="treasury-table-body">
+            <!-- Rendered dynamically by JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Top-up History Section -->
+      <div class="section-title" style="margin-top: 24px;">
+        <h3>📜 累積儲值紀錄 (含收款狀態)</h3>
+        <button class="btn btn-sm btn-outline" onclick="app.showTopUpModal()">➕ 新增儲值</button>
+      </div>
+
+      <div class="treasury-table-wrapper">
+        <table class="treasury-table">
+          <thead>
+            <tr>
+              <th>時間</th>
+              <th>姓名</th>
+              <th>金額</th>
+              <th>收款狀態</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody id="topup-table-body">
+            <!-- Rendered dynamically by JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- PAGE 4: 後端與 Google Apps Script 設定 -->
+    <section id="settings-page" class="page-section">
+      <div class="settings-card">
+        <h2>⚙️ Google 試算表後端設定 (5 個工作表)</h2>
+        <p class="settings-desc">
+          本系統串接 5 個工作表（餐廳清單、raw紀錄、金庫、累積儲值、飲食規劃）。請貼上您的 Web App URL。
+        </p>
+
+        <div class="form-group">
+          <label for="gas-api-url">Google Apps Script Web App URL</label>
+          <input type="text" id="gas-api-url" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
+
+        <div class="button-group">
+          <button class="btn btn-primary" onclick="app.saveGasUrl()">💾 儲存並連線</button>
+          <button class="btn btn-outline" onclick="app.testGasUrl()">⚡ 測試連線狀態</button>
+          <button class="btn btn-danger" onclick="app.resetToDemoMode()">🔄 重置為展示模式</button>
+        </div>
+
+        <div id="connection-status" class="status-box hidden"></div>
+      </div>
+
+      <!-- Instruction Accordion / Cards -->
+      <div class="instruction-card">
+        <h3>📄 Google 試算表 5 大頁面結構說明</h3>
+        
+        <div class="sheet-spec">
+          <h4>1. <code>餐廳清單</code></h4>
+          <p>欄位：<code>餐廳名稱</code> | <code>品項名稱</code> | <code>單價</code> | <code>分類</code> | <code>供應狀態</code></p>
+        </div>
+
+        <div class="sheet-spec">
+          <h4>2. <code>raw紀錄</code></h4>
+          <p>欄位：<code>送出時間</code> | <code>姓名</code> | <code>金額</code> | <code>點餐明細</code> | <code>日期</code> | <code>狀態</code></p>
+        </div>
+
+        <div class="sheet-spec">
+          <h4>3. <code>金庫</code></h4>
+          <p>欄位：<code>姓名</code> | <code>現在餘額</code> | <code>累積儲值錢</code> | <code>累積消費</code> | <code>最後更新時間</code></p>
+        </div>
+
+        <div class="sheet-spec">
+          <h4>4. <code>累積儲值</code> ⭐ (NEW!)</h4>
+          <p>欄位：<code>儲值時間</code> | <code>姓名</code> | <code>儲值金額</code> | <code>收款狀態</code> (已收款/未收款) | <code>備註</code></p>
+        </div>
+
+        <div class="sheet-spec">
+          <h4>5. <code>飲食規劃</code> ⭐ (NEW!)</h4>
+          <p>欄位：<code>日期</code> | <code>餐廳名稱</code> | <code>開放狀態</code> | <code>備註</code></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Sticky Bottom Cart Floating Bar -->
+  <div id="bottom-cart-bar" class="bottom-cart-bar hidden">
+    <div class="cart-summary" onclick="app.toggleCartModal()">
+      <div class="cart-badge">
+        <span id="cart-item-count">0</span>
+      </div>
+      <div class="cart-text">
+        <span class="cart-total-price" id="cart-total-price">$0</span>
+        <span class="cart-detail-hint">點擊查看餐點明細</span>
+      </div>
+    </div>
+    <button class="btn btn-success checkout-btn" onclick="app.submitOrder()">
+      送出訂購 🚀
+    </button>
+  </div>
+
+  <!-- Modal 1: 登入 / 切換使用者 -->
+  <div id="login-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>👤 登入系統</h3>
+        <button class="close-btn" onclick="app.closeLoginModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">請輸入您的名字以開始點餐與檢視餘額：</p>
+        <div class="form-group">
+          <input type="text" id="username-input" placeholder="請輸入姓名 (例如: 小明, 陳同學)" autofocus>
+        </div>
+        <div class="quick-user-chips" id="quick-user-chips">
+          <span class="chip-label">快速選擇常用成員：</span>
+          <div class="chip-list">
+            <button class="user-chip" onclick="app.quickLogin('小明')">小明</button>
+            <button class="user-chip" onclick="app.quickLogin('小華')">小華</button>
+            <button class="user-chip" onclick="app.quickLogin('老張')">老張</button>
+            <button class="user-chip" onclick="app.quickLogin('陳捷翐')">陳捷翐</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-block" onclick="app.confirmLogin()">確認進入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: 購物車明細彈窗 -->
+  <div id="cart-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🛒 <span id="cart-modal-date">今日</span> 訂餐明細確認</h3>
+        <button class="close-btn" onclick="app.toggleCartModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="cart-user-info">
+          <span>訂購人：<strong id="cart-modal-username">---</strong></span>
+          <span class="cart-user-balance" id="cart-modal-balance">目前餘額: $0</span>
+        </div>
+        <div id="cart-modal-items-list" class="cart-modal-items">
+          <!-- Dynamically filled -->
+        </div>
+        <div class="cart-modal-total">
+          <span>總計金額</span>
+          <strong id="cart-modal-total-amount">$0</strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="app.clearCart()">清空餐點</button>
+        <button class="btn btn-success" onclick="app.submitOrder()">確認送出訂單</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: 申請儲值彈窗 -->
+  <div id="topup-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>💰 新增/申請金額儲值</h3>
+        <button class="close-btn" onclick="app.closeTopUpModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>儲值人姓名</label>
+          <input type="text" id="topup-username-input" placeholder="姓名">
+        </div>
+        <div class="form-group">
+          <label>儲值金額 ($)</label>
+          <input type="number" id="topup-amount-input" placeholder="例如: 500, 1000" min="50">
+        </div>
+        <div class="form-group">
+          <label>備註/付款方式</label>
+          <input type="text" id="topup-note-input" placeholder="例如: 現金儲值, LINE Pay, 轉帳">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="app.closeTopUpModal()">取消</button>
+        <button class="btn btn-primary" onclick="app.submitTopUp()">確認送出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- JavaScript Entrypoint -->
+  <script src="js/app.js"></script>
+</body>
+</html>
