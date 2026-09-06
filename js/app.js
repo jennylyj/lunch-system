@@ -794,11 +794,62 @@ class LunchApp {
     this.renderOverview();
   }
 
+  normalizeOrders(orders) {
+    if (!Array.isArray(orders)) return [];
+
+    const menuMap = {};
+    if (Array.isArray(this.menu)) {
+      this.menu.forEach(m => {
+        if (m && m.name) {
+          menuMap[m.name.trim()] = parseFloat(String(m.price || 0).replace(/[^0-9.]/g, '')) || 0;
+        }
+      });
+    }
+
+    return orders.map(ord => {
+      let totalPrice = parseFloat(String(ord.totalPrice || 0).replace(/[^0-9.]/g, '')) || 0;
+      let items = Array.isArray(ord.items) ? ord.items : [];
+
+      items = items.map(it => {
+        const name = String(it.name || '').trim();
+        const qty = parseInt(it.qty) || 1;
+        let price = parseFloat(String(it.price || 0).replace(/[^0-9.]/g, '')) || 0;
+
+        if (price === 0 && menuMap[name]) {
+          price = menuMap[name];
+        }
+
+        return { name, qty, price };
+      });
+
+      if (items.length === 1 && items[0].price === 0 && totalPrice > 0 && items[0].qty > 0) {
+        items[0].price = Math.round(totalPrice / items[0].qty);
+      }
+
+      let calculatedTotal = 0;
+      items.forEach(it => {
+        calculatedTotal += it.price * it.qty;
+      });
+
+      if (totalPrice === 0 && calculatedTotal > 0) {
+        totalPrice = calculatedTotal;
+      }
+
+      return {
+        ...ord,
+        totalPrice: totalPrice,
+        items: items
+      };
+    });
+  }
+
   renderOverview() {
     const container = document.getElementById("overview-content");
     const countTag = document.getElementById("total-orders-tag");
     if (!container) return;
     container.innerHTML = "";
+
+    this.orders = this.normalizeOrders(this.orders);
 
     const dateOrders = this.orders.filter(o => !o.date || o.date === this.currentSelectedDate);
     const activeOrders = dateOrders.filter(o => o.status !== "已取消");
@@ -828,6 +879,8 @@ class LunchApp {
         ord.items.forEach(it => {
           if (!itemMap[it.name]) {
             itemMap[it.name] = { totalQty: 0, price: it.price, buyers: {} };
+          } else if (!itemMap[it.name].price && it.price) {
+            itemMap[it.name].price = it.price;
           }
           itemMap[it.name].totalQty += it.qty;
           itemMap[it.name].buyers[ord.username] = (itemMap[it.name].buyers[ord.username] || 0) + it.qty;
@@ -848,13 +901,14 @@ class LunchApp {
 
         const card = document.createElement("div");
         card.className = "overview-card";
+        const priceText = itemInfo.price ? `單價${itemInfo.price}元` : `單價未知`;
         card.innerHTML = `
           <div class="overview-card-header">
             <div class="item-title-wrap">
               <span class="item-count-badge">x ${itemInfo.totalQty}</span>
               <span class="item-name-lg">${itemName}</span>
             </div>
-            <span class="item-price">$${itemInfo.price * itemInfo.totalQty}</span>
+            <span class="item-price">${priceText}</span>
           </div>
           <div class="people-names-list">
             <span style="font-size: 0.82rem; color: var(--text-muted);">訂購成員：</span>
@@ -935,7 +989,8 @@ class LunchApp {
       const itemMap = {};
       activeDateOrders.forEach(ord => {
         ord.items.forEach(it => {
-          if (!itemMap[it.name]) itemMap[it.name] = { qty: 0, buyers: {} };
+          if (!itemMap[it.name]) itemMap[it.name] = { qty: 0, price: it.price, buyers: {} };
+          else if (!itemMap[it.name].price && it.price) itemMap[it.name].price = it.price;
           itemMap[it.name].qty += it.qty;
           itemMap[it.name].buyers[ord.username] = (itemMap[it.name].buyers[ord.username] || 0) + it.qty;
         });
@@ -943,17 +998,19 @@ class LunchApp {
 
       Object.entries(itemMap).forEach(([name, info]) => {
         const buyers = Object.entries(info.buyers).map(([u, q]) => `${u}${q > 1 ? `x${q}` : ''}`).join(", ");
-        text += `• ${name} x${info.qty} (${buyers})\n`;
+        const priceStr = info.price ? ` (單價${info.price}元)` : '';
+        text += `• ${name} x${info.qty}${priceStr} (${buyers})\n`;
       });
     } else {
       const personMap = {};
       activeDateOrders.forEach(ord => {
-        if (!personMap[ord.username]) personMap[ord.username] = [];
-        ord.items.forEach(it => personMap[ord.username].push(`${it.name} x${it.qty}`));
+        if (!personMap[ord.username]) personMap[ord.username] = { items: [], total: 0 };
+        ord.items.forEach(it => personMap[ord.username].items.push(`${it.name} x${it.qty}`));
+        personMap[ord.username].total += ord.totalPrice;
       });
 
-      Object.entries(personMap).forEach(([user, items]) => {
-        text += `👤 ${user}: ${items.join(", ")}\n`;
+      Object.entries(personMap).forEach(([user, info]) => {
+        text += `👤 ${user}: ${info.items.join(", ")} (消費總額 $${info.total})\n`;
       });
     }
 

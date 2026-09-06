@@ -324,12 +324,27 @@ function getAllOrders(ss) {
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
 
+  // 讀取菜單作為對照表
+  var menuList = [];
+  var menuSheet = ss.getSheetByName("菜單");
+  if (menuSheet) {
+    var menuData = menuSheet.getDataRange().getValues();
+    for (var m = 1; m < menuData.length; m++) {
+      if (menuData[m][1]) {
+        menuList.push({
+          name: String(menuData[m][1]).trim(),
+          price: parseFloat(String(menuData[m][2] || "").replace(/[^0-9.]/g, "")) || 0
+        });
+      }
+    }
+  }
+
   var orders = [];
   for (var i = data.length - 1; i >= 1; i--) {
     var row = data[i];
     var rawTime = row[0];
     var username = row[1];
-    var totalPrice = Number(row[2]) || 0;
+    var totalPrice = parseFloat(String(row[2] || "").replace(/[^0-9.]/g, "")) || 0;
     var itemDetails = String(row[3] || "");
     var dateCol = row[4];
 
@@ -353,7 +368,14 @@ function getAllOrders(ss) {
     var orderStatus = String(row[5] || "已確認");
 
     if (username) {
-      var parsedItems = parseDetailsToItems(itemDetails);
+      var parsedItems = parseDetailsToItems(itemDetails, totalPrice, menuList);
+
+      if (totalPrice === 0 && parsedItems.length > 0) {
+        for (var k = 0; k < parsedItems.length; k++) {
+          totalPrice += (parsedItems[k].price || 0) * (parsedItems[k].qty || 1);
+        }
+      }
+
       var timeStr = rawTime instanceof Date ? Utilities.formatDate(rawTime, "GMT+8", "HH:mm") : "12:00";
 
       orders.push({
@@ -375,24 +397,42 @@ function getOrdersForDate(ss, reqDate) {
   return all.filter(function(o) { return o.date === reqDate; });
 }
 
-function parseDetailsToItems(detailsStr) {
+function parseDetailsToItems(detailsStr, totalPrice, menuList) {
   var items = [];
   if (!detailsStr) return items;
+
+  var menuMap = {};
+  if (menuList && menuList.length > 0) {
+    for (var m = 0; m < menuList.length; m++) {
+      menuMap[menuList[m].name] = menuList[m].price;
+    }
+  }
 
   var parts = detailsStr.split(",");
   for (var i = 0; i < parts.length; i++) {
     var p = parts[i].trim();
     var match = p.match(/(.+) x(\d+)/);
+    var itemName = "";
+    var qty = 1;
     if (match) {
-      items.push({
-        name: match[1].trim(),
-        qty: parseInt(match[2]),
-        price: 0
-      });
+      itemName = match[1].trim();
+      qty = parseInt(match[2]);
     } else {
-      items.push({ name: p, qty: 1, price: 0 });
+      itemName = p;
     }
+
+    var itemPrice = menuMap[itemName] || 0;
+    items.push({
+      name: itemName,
+      qty: qty,
+      price: itemPrice
+    });
   }
+
+  if (items.length === 1 && items[0].price === 0 && totalPrice > 0 && items[0].qty > 0) {
+    items[0].price = Math.round(totalPrice / items[0].qty);
+  }
+
   return items;
 }
 
