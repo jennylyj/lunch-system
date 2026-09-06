@@ -1132,7 +1132,12 @@ class LunchApp {
           localStorage.setItem("lunch_app_mock_schedule", JSON.stringify(this.schedule));
         }
         if (data.topUps) {
-          this.topUps = data.topUps;
+          // 保留尚未同步至 GAS 試算表的本地新新增儲值紀錄
+          const incomingTopUps = data.topUps;
+          const localUnsyncedTopUps = (this.topUps || []).filter(t => {
+            return !incomingTopUps.some(g => g.timestamp === t.timestamp && g.username === t.username && g.amount === t.amount);
+          });
+          this.topUps = [...localUnsyncedTopUps, ...incomingTopUps];
           localStorage.setItem("lunch_app_mock_topups", JSON.stringify(this.topUps));
         }
 
@@ -1144,16 +1149,21 @@ class LunchApp {
             date: o.date || fetchDate
           }));
 
+          // 保留本地建立但尚未在 GAS 列表中出現的訂單 (id 以 ord- 開頭)
+          const localUnsyncedOrders = (this.orders || []).filter(o => o.id && o.id.startsWith("ord-"));
+          const incomingIds = new Set(incomingOrders.map(o => o.id));
+          const unsyncedLocal = localUnsyncedOrders.filter(o => !incomingIds.has(o.id));
+
           // 判斷回傳資料是否已包含跨日訂單，或明確含有與 fetchDate 不同的 date 標籤
           const hasMultipleDatesOrExplicitDate = data.orders.some(o => Boolean(o.date) && o.date !== fetchDate);
 
           if (hasMultipleDatesOrExplicitDate) {
-            // 新版 GAS：回傳所有歷史日期的全量訂單
-            this.orders = incomingOrders;
+            // 新版 GAS：回傳所有歷史日期的全量訂單 + 保留本地未同步訂單
+            this.orders = [...unsyncedLocal, ...incomingOrders];
           } else {
-            // 舊版 GAS 或單日回應：僅替換 fetchDate 當天的訂單，保留其他日期的歷史紀錄
-            const otherDateOrders = (this.orders || []).filter(o => o.date && o.date !== fetchDate);
-            this.orders = [...incomingOrders, ...otherDateOrders];
+            // 舊版 GAS 或單日回應：僅替換 fetchDate 當天的訂單，保留其他日期的歷史紀錄與本地未同步訂單
+            const otherDateOrders = (this.orders || []).filter(o => o.date && o.date !== fetchDate && !o.id?.startsWith("ord-"));
+            this.orders = [...unsyncedLocal, ...incomingOrders, ...otherDateOrders];
           }
           this.saveLocalState();
         }
