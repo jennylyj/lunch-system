@@ -259,6 +259,9 @@ class LunchApp {
     this.cart = {};
     this.updateCartBar();
 
+    // 點選日期切換時，自動切換至「今日/預約點餐」頁面
+    this.switchTab("order-page");
+
     if (this.gasUrl) {
       this.fetchDataFromGas();
     } else {
@@ -353,6 +356,7 @@ class LunchApp {
 
     if (tabId === "order-page") {
       this.updateCartBar();
+      this.renderMenu();
     } else {
       const cartBar = document.getElementById("bottom-cart-bar");
       if (cartBar) cartBar.classList.add("hidden");
