@@ -1,6 +1,6 @@
 /**
- * 訂餐系統 (Lunch Ordering System) v2.2 - Main Frontend JS
- * 新增：點餐日期限制 (僅限未來兩週內的週一至週三可預約訂餐)
+ * 訂餐系統 (Lunch Ordering System) v2.3 - Main Frontend JS
+ * 修正：移除後端設定頁面後補全 DOM 空值檢查，避免 JS 例外中斷選單渲染
  */
 
 // 💡【主辦人設定區域】請在此貼上您的 Google Apps Script Web App URL
@@ -66,6 +66,8 @@ function formatDateObject(d) {
 
 // 檢查日期是否符合「未來兩週內 + 週一至週三」
 function checkDateOrderable(dateStr) {
+  if (!dateStr) return { orderable: true, reason: "開放點餐中" };
+
   const parts = dateStr.split('-').map(Number);
   const targetDate = new Date(parts[0], parts[1] - 1, parts[2]);
   
@@ -73,9 +75,9 @@ function checkDateOrderable(dateStr) {
   today.setHours(0, 0, 0, 0);
 
   const maxDate = new Date(today);
-  maxDate.setDate(maxDate.getDate() + 14); // 未來 14 天
+  maxDate.setDate(maxDate.getDate() + 14);
 
-  const dayOfWeek = targetDate.getDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  const dayOfWeek = targetDate.getDay();
 
   if (targetDate < today) {
     return { orderable: false, reason: "無法選擇過去的日期" };
@@ -88,10 +90,9 @@ function checkDateOrderable(dateStr) {
     return { orderable: false, reason: `選取日期為${weekNames[dayOfWeek]}，系統僅開放【週一至週三】訂餐` };
   }
 
-  return { orderable: true, reason: "開放訂餐中" };
+  return { orderable: true, reason: "開放點餐中" };
 }
 
-// 產生未來兩週內所有符合【週一至週三】的日期清單
 function getAvailableOrderDates() {
   const list = [];
   const today = new Date();
@@ -114,10 +115,9 @@ function getAvailableOrderDates() {
   return list;
 }
 
-// 預設示範排程
 const MOCK_SCHEDULE = getAvailableOrderDates().map((item, idx) => ({
   date: item.date,
-  restaurantName: idx % 2 === 0 ? "台大醫學院 - 杏園" : "公館特色便當",
+  restaurantName: "台大醫學院 - 杏園",
   status: "開放點餐",
   note: `${item.label} 排程`
 }));
@@ -136,7 +136,6 @@ class LunchApp {
     this.currentUser = localStorage.getItem("lunch_app_user") || null;
     this.gasUrl = localStorage.getItem("lunch_app_gas_url") || DEFAULT_GAS_URL || "";
     
-    // 預設預約日期：若今天非週一至週三，自動選取第一個符合的開放預約日！
     const availableDates = getAvailableOrderDates();
     const todayCheck = checkDateOrderable(getTodayString(0));
     this.currentSelectedDate = todayCheck.orderable ? getTodayString(0) : (availableDates.length > 0 ? availableDates[0].date : getTodayString(0));
@@ -160,7 +159,10 @@ class LunchApp {
     const gasInput = document.getElementById("gas-api-url");
     if (gasInput && this.gasUrl) {
       gasInput.value = this.gasUrl;
-      document.getElementById("demo-banner").classList.add("hidden");
+    }
+    const demoBanner = document.getElementById("demo-banner");
+    if (demoBanner && this.gasUrl) {
+      demoBanner.classList.add("hidden");
     }
 
     if (this.gasUrl) {
@@ -170,45 +172,52 @@ class LunchApp {
     }
   }
 
-  // --- 渲染日期選單 (限定週一至週三 + 未來14天) ---
   renderDateSwitcher() {
     const scrollContainer = document.getElementById("date-pills-scroll");
-    scrollContainer.innerHTML = "";
+    if (scrollContainer) {
+      scrollContainer.innerHTML = "";
+      const availableDates = getAvailableOrderDates();
 
-    const availableDates = getAvailableOrderDates();
+      availableDates.forEach(d => {
+        const btn = document.createElement("button");
+        btn.className = `date-pill ${d.date === this.currentSelectedDate ? 'active' : ''}`;
+        btn.textContent = d.label;
+        btn.onclick = () => this.selectDate(d.date);
+        scrollContainer.appendChild(btn);
+      });
+    }
 
-    availableDates.forEach(d => {
-      const btn = document.createElement("button");
-      btn.className = `date-pill ${d.date === this.currentSelectedDate ? 'active' : ''}`;
-      btn.textContent = d.label;
-      btn.onclick = () => this.selectDate(d.date);
-      scrollContainer.appendChild(btn);
-    });
-
-    // 設定日曆 Picker 限制 min / max
     const datePicker = document.getElementById("custom-date-picker");
-    datePicker.min = getTodayString(0);
-    datePicker.max = getTodayString(14);
-    datePicker.value = this.currentSelectedDate;
+    if (datePicker) {
+      datePicker.min = getTodayString(0);
+      datePicker.max = getTodayString(14);
+      datePicker.value = this.currentSelectedDate;
+    }
 
-    // 檢查當前選擇日期的點餐狀態
     const dateCheck = checkDateOrderable(this.currentSelectedDate);
     const badgeEl = document.getElementById("schedule-status-badge");
     const currentScheduleItem = this.schedule.find(s => s.date === this.currentSelectedDate);
     const activeRestName = currentScheduleItem ? currentScheduleItem.restaurantName : "台大醫學院 - 杏園";
 
-    document.getElementById("restaurant-name").textContent = activeRestName;
-    document.getElementById("demo-date-label").textContent = this.currentSelectedDate;
-    document.getElementById("overview-date-title").textContent = this.currentSelectedDate;
+    const restNameEl = document.getElementById("restaurant-name");
+    if (restNameEl) restNameEl.textContent = activeRestName;
 
-    if (dateCheck.orderable) {
-      badgeEl.textContent = "開放點餐中 (週一~週三限定)";
-      badgeEl.style.background = "#d1fae5";
-      badgeEl.style.color = "#047857";
-    } else {
-      badgeEl.textContent = `🔒 ${dateCheck.reason}`;
-      badgeEl.style.background = "#fee2e2";
-      badgeEl.style.color = "#991b1b";
+    const demoDateEl = document.getElementById("demo-date-label");
+    if (demoDateEl) demoDateEl.textContent = this.currentSelectedDate;
+
+    const overviewDateEl = document.getElementById("overview-date-title");
+    if (overviewDateEl) overviewDateEl.textContent = this.currentSelectedDate;
+
+    if (badgeEl) {
+      if (dateCheck.orderable) {
+        badgeEl.textContent = "開放點餐中 (週一~週三限定)";
+        badgeEl.style.background = "#d1fae5";
+        badgeEl.style.color = "#047857";
+      } else {
+        badgeEl.textContent = `🔒 ${dateCheck.reason}`;
+        badgeEl.style.background = "#fee2e2";
+        badgeEl.style.color = "#991b1b";
+      }
     }
   }
 
@@ -244,12 +253,12 @@ class LunchApp {
     const balEl = document.getElementById("display-balance");
 
     if (this.currentUser) {
-      nameEl.textContent = this.currentUser;
+      if (nameEl) nameEl.textContent = this.currentUser;
       const balance = this.getUserCalculatedBalance(this.currentUser);
-      balEl.textContent = `$${balance}`;
+      if (balEl) balEl.textContent = `$${balance}`;
     } else {
-      nameEl.textContent = "請點擊登入";
-      balEl.textContent = "$0";
+      if (nameEl) nameEl.textContent = "請點擊登入";
+      if (balEl) balEl.textContent = "$0";
     }
   }
 
@@ -273,22 +282,25 @@ class LunchApp {
 
   showLoginModal() {
     const input = document.getElementById("username-input");
-    if (this.currentUser) input.value = this.currentUser;
-    document.getElementById("login-modal").classList.remove("hidden");
+    if (input && this.currentUser) input.value = this.currentUser;
+    const modal = document.getElementById("login-modal");
+    if (modal) modal.classList.remove("hidden");
   }
 
   closeLoginModal() {
-    document.getElementById("login-modal").classList.add("hidden");
+    const modal = document.getElementById("login-modal");
+    if (modal) modal.classList.add("hidden");
   }
 
   quickLogin(username) {
-    document.getElementById("username-input").value = username;
+    const input = document.getElementById("username-input");
+    if (input) input.value = username;
     this.confirmLogin();
   }
 
   confirmLogin() {
     const input = document.getElementById("username-input");
-    const username = input.value.trim();
+    const username = input ? input.value.trim() : "";
     if (!username) {
       this.showToast("⚠️ 請輸入名字！");
       return;
@@ -315,7 +327,8 @@ class LunchApp {
     if (tabId === "order-page") {
       this.updateCartBar();
     } else {
-      document.getElementById("bottom-cart-bar").classList.add("hidden");
+      const cartBar = document.getElementById("bottom-cart-bar");
+      if (cartBar) cartBar.classList.add("hidden");
     }
 
     if (tabId === "overview-page") this.renderOverview();
@@ -332,11 +345,11 @@ class LunchApp {
 
   renderMenu() {
     const container = document.getElementById("menu-list");
+    if (!container) return;
     container.innerHTML = "";
 
     const dateCheck = checkDateOrderable(this.currentSelectedDate);
     
-    // 若該日期不開放訂餐，顯示告示
     if (!dateCheck.orderable) {
       container.innerHTML = `
         <div class="overview-card" style="text-align: center; color: #991b1b; background: #fee2e2; padding: 24px;">
@@ -349,7 +362,8 @@ class LunchApp {
       return;
     }
 
-    const activeRestName = document.getElementById("restaurant-name").textContent;
+    const restNameEl = document.getElementById("restaurant-name");
+    const activeRestName = restNameEl ? restNameEl.textContent : "台大醫學院 - 杏園";
 
     let filtered = this.menu.filter(m => !m.restaurantName || m.restaurantName.includes(activeRestName) || activeRestName.includes(m.restaurantName));
     if (filtered.length === 0) filtered = this.menu;
@@ -407,6 +421,8 @@ class LunchApp {
 
   updateCartBar() {
     const bar = document.getElementById("bottom-cart-bar");
+    if (!bar) return;
+
     const countEl = document.getElementById("cart-item-count");
     const totalEl = document.getElementById("cart-total-price");
 
@@ -419,8 +435,8 @@ class LunchApp {
     });
 
     if (totalQty > 0) {
-      countEl.textContent = totalQty;
-      totalEl.textContent = `$${totalPrice}`;
+      if (countEl) countEl.textContent = totalQty;
+      if (totalEl) totalEl.textContent = `$${totalPrice}`;
       bar.classList.remove("hidden");
     } else {
       bar.classList.add("hidden");
@@ -429,6 +445,8 @@ class LunchApp {
 
   toggleCartModal() {
     const modal = document.getElementById("cart-modal");
+    if (!modal) return;
+
     if (modal.classList.contains("hidden")) {
       if (!this.currentUser) {
         this.showLoginModal();
@@ -442,12 +460,18 @@ class LunchApp {
   }
 
   renderCartModal() {
-    document.getElementById("cart-modal-date").textContent = `(${this.currentSelectedDate})`;
-    document.getElementById("cart-modal-username").textContent = this.currentUser || "未登入";
+    const dateModalEl = document.getElementById("cart-modal-date");
+    if (dateModalEl) dateModalEl.textContent = `(${this.currentSelectedDate})`;
+    
+    const userModalEl = document.getElementById("cart-modal-username");
+    if (userModalEl) userModalEl.textContent = this.currentUser || "未登入";
+
     const balance = this.getUserCalculatedBalance(this.currentUser);
-    document.getElementById("cart-modal-balance").textContent = `目前餘額: $${balance}`;
+    const balModalEl = document.getElementById("cart-modal-balance");
+    if (balModalEl) balModalEl.textContent = `目前餘額: $${balance}`;
 
     const listEl = document.getElementById("cart-modal-items-list");
+    if (!listEl) return;
     listEl.innerHTML = "";
 
     let total = 0;
@@ -464,14 +488,16 @@ class LunchApp {
       listEl.appendChild(row);
     });
 
-    document.getElementById("cart-modal-total-amount").textContent = `$${total}`;
+    const totalModalEl = document.getElementById("cart-modal-total-amount");
+    if (totalModalEl) totalModalEl.textContent = `$${total}`;
   }
 
   clearCart() {
     this.cart = {};
     this.renderMenu();
     this.updateCartBar();
-    document.getElementById("cart-modal").classList.add("hidden");
+    const modal = document.getElementById("cart-modal");
+    if (modal) modal.classList.add("hidden");
     this.showToast("已清空餐點");
   }
 
@@ -537,7 +563,8 @@ class LunchApp {
     this.cart = {};
     this.renderMenu();
     this.updateCartBar();
-    document.getElementById("cart-modal").classList.add("hidden");
+    const modal = document.getElementById("cart-modal");
+    if (modal) modal.classList.add("hidden");
 
     this.updateUserUI();
     this.switchTab("overview-page");
@@ -546,14 +573,17 @@ class LunchApp {
 
   switchOverviewMode(mode) {
     this.overviewMode = mode;
-    document.getElementById("btn-mode-items").classList.toggle("active", mode === "by-items");
-    document.getElementById("btn-mode-people").classList.toggle("active", mode === "by-people");
+    const btnItems = document.getElementById("btn-mode-items");
+    const btnPeople = document.getElementById("btn-mode-people");
+    if (btnItems) btnItems.classList.toggle("active", mode === "by-items");
+    if (btnPeople) btnPeople.classList.toggle("active", mode === "by-people");
     this.renderOverview();
   }
 
   renderOverview() {
     const container = document.getElementById("overview-content");
     const countTag = document.getElementById("total-orders-tag");
+    if (!container) return;
     container.innerHTML = "";
 
     const dateOrders = this.orders.filter(o => !o.date || o.date === this.currentSelectedDate);
@@ -562,7 +592,7 @@ class LunchApp {
     dateOrders.forEach(o => {
       o.items.forEach(i => totalItemCount += i.qty);
     });
-    countTag.textContent = `共 ${totalItemCount} 份餐點`;
+    if (countTag) countTag.textContent = `共 ${totalItemCount} 份餐點`;
 
     if (dateOrders.length === 0) {
       container.innerHTML = `
@@ -640,7 +670,9 @@ class LunchApp {
   }
 
   copyOverviewText() {
-    let text = `🍱 【${document.getElementById("restaurant-name").textContent} - ${this.currentSelectedDate} 點餐統計】\n----------------------------\n`;
+    const restEl = document.getElementById("restaurant-name");
+    const restName = restEl ? restEl.textContent : "杏園";
+    let text = `🍱 【${restName} - ${this.currentSelectedDate} 點餐統計】\n----------------------------\n`;
 
     const dateOrders = this.orders.filter(o => !o.date || o.date === this.currentSelectedDate);
 
@@ -670,7 +702,9 @@ class LunchApp {
       });
     }
 
-    text += `----------------------------\n共計：${document.getElementById("total-orders-tag").textContent}`;
+    const countTag = document.getElementById("total-orders-tag");
+    const countText = countTag ? countTag.textContent : "";
+    text += `----------------------------\n共計：${countText}`;
 
     navigator.clipboard.writeText(text).then(() => {
       this.showToast("📋 已成功複製點餐明細！");
@@ -682,38 +716,40 @@ class LunchApp {
 
   renderTreasury() {
     const tbody = document.getElementById("treasury-table-body");
-    tbody.innerHTML = "";
+    if (tbody) {
+      tbody.innerHTML = "";
 
-    const userNames = new Set();
-    this.topUps.forEach(t => userNames.add(t.username));
-    this.orders.forEach(o => userNames.add(o.username));
-    if (this.currentUser) userNames.add(this.currentUser);
+      const userNames = new Set();
+      this.topUps.forEach(t => userNames.add(t.username));
+      this.orders.forEach(o => userNames.add(o.username));
+      if (this.currentUser) userNames.add(this.currentUser);
 
-    userNames.forEach(uName => {
-      let approvedDeposit = 0;
-      this.topUps.forEach(t => {
-        if (t.username === uName && t.status === "已收款") approvedDeposit += t.amount;
+      userNames.forEach(uName => {
+        let approvedDeposit = 0;
+        this.topUps.forEach(t => {
+          if (t.username === uName && t.status === "已收款") approvedDeposit += t.amount;
+        });
+
+        let totalSpent = 0;
+        this.orders.forEach(o => {
+          if (o.username === uName) totalSpent += o.totalPrice;
+        });
+
+        const currentBalance = approvedDeposit - totalSpent;
+        const isCurrent = uName === this.currentUser;
+
+        const tr = document.createElement("tr");
+        if (isCurrent) tr.className = "highlight-user";
+
+        tr.innerHTML = `
+          <td>${uName} ${isCurrent ? '⭐' : ''}</td>
+          <td style="color: ${currentBalance < 0 ? '#ef4444' : 'var(--primary-color)'}; font-weight: 700;">$${currentBalance}</td>
+          <td>$${approvedDeposit}</td>
+          <td>$${totalSpent}</td>
+        `;
+        tbody.appendChild(tr);
       });
-
-      let totalSpent = 0;
-      this.orders.forEach(o => {
-        if (o.username === uName) totalSpent += o.totalPrice;
-      });
-
-      const currentBalance = approvedDeposit - totalSpent;
-      const isCurrent = uName === this.currentUser;
-
-      const tr = document.createElement("tr");
-      if (isCurrent) tr.className = "highlight-user";
-
-      tr.innerHTML = `
-        <td>${uName} ${isCurrent ? '⭐' : ''}</td>
-        <td style="color: ${currentBalance < 0 ? '#ef4444' : 'var(--primary-color)'}; font-weight: 700;">$${currentBalance}</td>
-        <td>$${approvedDeposit}</td>
-        <td>$${totalSpent}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    }
 
     if (this.currentUser) {
       let myApprovedDeposit = 0;
@@ -726,45 +762,59 @@ class LunchApp {
         if (o.username === this.currentUser) myTotalSpent += o.totalPrice;
       });
 
-      document.getElementById("treasury-my-balance").textContent = `$${myApprovedDeposit - myTotalSpent}`;
-      document.getElementById("treasury-my-deposit").textContent = `$${myApprovedDeposit}`;
-      document.getElementById("treasury-my-spent").textContent = `$${myTotalSpent}`;
+      const myBalEl = document.getElementById("treasury-my-balance");
+      if (myBalEl) myBalEl.textContent = `$${myApprovedDeposit - myTotalSpent}`;
+      
+      const myDepEl = document.getElementById("treasury-my-deposit");
+      if (myDepEl) myDepEl.textContent = `$${myApprovedDeposit}`;
+
+      const mySpeEl = document.getElementById("treasury-my-spent");
+      if (mySpeEl) mySpeEl.textContent = `$${myTotalSpent}`;
     }
 
     const topupTbody = document.getElementById("topup-table-body");
-    topupTbody.innerHTML = "";
+    if (topupTbody) {
+      topupTbody.innerHTML = "";
 
-    this.topUps.forEach(t => {
-      const tr = document.createElement("tr");
-      const isApproved = t.status === "已收款";
-      const statusBadge = `<span class="${isApproved ? 'badge-status-approved' : 'badge-status-pending'}">${t.status}</span>`;
+      this.topUps.forEach(t => {
+        const tr = document.createElement("tr");
+        const isApproved = t.status === "已收款";
+        const statusBadge = `<span class="${isApproved ? 'badge-status-approved' : 'badge-status-pending'}">${t.status}</span>`;
 
-      tr.innerHTML = `
-        <td>${t.timestamp}</td>
-        <td>${t.username}</td>
-        <td style="font-weight: 700;">+$${t.amount}</td>
-        <td>${statusBadge}</td>
-        <td style="color: var(--text-muted); font-size: 0.8rem;">${t.note || '-'}</td>
-      `;
-      topupTbody.appendChild(tr);
-    });
+        tr.innerHTML = `
+          <td>${t.timestamp}</td>
+          <td>${t.username}</td>
+          <td style="font-weight: 700;">+$${t.amount}</td>
+          <td>${statusBadge}</td>
+          <td style="color: var(--text-muted); font-size: 0.8rem;">${t.note || '-'}</td>
+        `;
+        topupTbody.appendChild(tr);
+      });
+    }
   }
 
   showTopUpModal() {
-    if (this.currentUser) {
-      document.getElementById("topup-username-input").value = this.currentUser;
+    const input = document.getElementById("topup-username-input");
+    if (input && this.currentUser) {
+      input.value = this.currentUser;
     }
-    document.getElementById("topup-modal").classList.remove("hidden");
+    const modal = document.getElementById("topup-modal");
+    if (modal) modal.classList.remove("hidden");
   }
 
   closeTopUpModal() {
-    document.getElementById("topup-modal").classList.add("hidden");
+    const modal = document.getElementById("topup-modal");
+    if (modal) modal.classList.add("hidden");
   }
 
   async submitTopUp() {
-    const uName = document.getElementById("topup-username-input").value.trim();
-    const amount = Number(document.getElementById("topup-amount-input").value);
-    const note = document.getElementById("topup-note-input").value.trim();
+    const uInput = document.getElementById("topup-username-input");
+    const aInput = document.getElementById("topup-amount-input");
+    const nInput = document.getElementById("topup-note-input");
+
+    const uName = uInput ? uInput.value.trim() : "";
+    const amount = aInput ? Number(aInput.value) : 0;
+    const note = nInput ? nInput.value.trim() : "";
 
     if (!uName || !amount || amount <= 0) {
       this.showToast("⚠️ 請填寫姓名與正確金額！");
@@ -811,27 +861,31 @@ class LunchApp {
   }
 
   saveGasUrl() {
-    const url = document.getElementById("gas-api-url").value.trim();
+    const gasInput = document.getElementById("gas-api-url");
+    const url = gasInput ? gasInput.value.trim() : "";
     if (!url.startsWith("http")) {
-      this.showToast("⚠️ 請輸入正確的 Web App URL (以 https:// 開頭)");
+      this.showToast("⚠️ 請輸入正確的 Web App URL");
       return;
     }
     this.gasUrl = url;
     localStorage.setItem("lunch_app_gas_url", url);
-    document.getElementById("demo-banner").classList.add("hidden");
     this.showToast("💾 已儲存 Google Apps Script URL");
     this.fetchDataFromGas();
   }
 
   async testGasUrl() {
     const statusBox = document.getElementById("connection-status");
-    statusBox.className = "status-box";
-    statusBox.textContent = "⚡ 正在連線至 Google 試算表...";
-    statusBox.classList.remove("hidden");
+    if (statusBox) {
+      statusBox.className = "status-box";
+      statusBox.textContent = "⚡ 正在連線至 Google 試算表...";
+      statusBox.classList.remove("hidden");
+    }
 
     if (!this.gasUrl) {
-      statusBox.className = "status-box error";
-      statusBox.textContent = "❌ 未設定 Web App URL！";
+      if (statusBox) {
+        statusBox.className = "status-box error";
+        statusBox.textContent = "❌ 未設定 Web App URL！";
+      }
       return;
     }
 
@@ -839,14 +893,18 @@ class LunchApp {
       const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}`);
       const data = await res.json();
       if (data.status === "success") {
-        statusBox.className = "status-box success";
-        statusBox.textContent = `✅ 連線成功！當前日期【${data.selectedDate}】安排餐廳：【${data.restaurantName}】，菜單共 ${data.menu ? data.menu.length : 0} 項。`;
+        if (statusBox) {
+          statusBox.className = "status-box success";
+          statusBox.textContent = `✅ 連線成功！`;
+        }
       } else {
         throw new Error(data.message || "未知回應");
       }
     } catch (err) {
-      statusBox.className = "status-box error";
-      statusBox.textContent = `❌ 連線失敗: ${err.message}`;
+      if (statusBox) {
+        statusBox.className = "status-box error";
+        statusBox.textContent = `❌ 連線失敗: ${err.message}`;
+      }
     }
   }
 
@@ -862,7 +920,8 @@ class LunchApp {
         if (data.topUps) this.topUps = data.topUps;
 
         if (data.restaurantName) {
-          document.getElementById("restaurant-name").textContent = data.restaurantName;
+          const restNameEl = document.getElementById("restaurant-name");
+          if (restNameEl) restNameEl.textContent = data.restaurantName;
         }
 
         this.renderAllViews();
@@ -886,8 +945,7 @@ class LunchApp {
     this.menu = [...MOCK_XINGYUAN_MENU];
     this.topUps = [...MOCK_TOPUPS];
     this.orders = [...MOCK_INITIAL_ORDERS];
-    document.getElementById("gas-api-url").value = this.gasUrl;
-    if (!this.gasUrl) document.getElementById("demo-banner").classList.remove("hidden");
+    
     this.renderDateSwitcher();
     this.renderAllViews();
     this.showToast("🔄 已重置為展示模式");
@@ -917,6 +975,7 @@ class LunchApp {
 
   showToast(message) {
     const container = document.getElementById("toast-container");
+    if (!container) return;
     const toast = document.createElement("div");
     toast.textContent = message;
     toast.className = "toast";
