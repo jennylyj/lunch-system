@@ -23,8 +23,8 @@ function doGet(e) {
     // 2. 根據安排的餐廳讀取菜單
     var menuData = getMenuData(ss, matchedRestaurant);
 
-    // 3. 讀取特定日期的訂單紀錄
-    var ordersData = getOrdersForDate(ss, reqDate);
+    // 3. 讀取所有日期的完整訂單紀錄 (以正確計算跨日累積消費與金庫餘額)
+    var ordersData = getAllOrders(ss);
 
     // 4. 讀取儲值紀錄與重新計算金庫餘額
     var topUpsData = getTopUpsData(ss);
@@ -255,8 +255,8 @@ function getMenuData(ss, targetRestaurant) {
   return menuList;
 }
 
-// 3. 取得特定日期的訂單紀錄
-function getOrdersForDate(ss, reqDate) {
+// 3. 取得所有歷史訂單紀錄 (包含日期欄位)
+function getAllOrders(ss) {
   var sheet = ss.getSheetByName("raw紀錄");
   if (!sheet) return [];
 
@@ -266,38 +266,49 @@ function getOrdersForDate(ss, reqDate) {
   var orders = [];
   for (var i = data.length - 1; i >= 1; i--) {
     var row = data[i];
-    var rawDate = row[0];
+    var rawTime = row[0];
     var username = row[1];
-    var totalPrice = Number(row[2]);
-    var itemDetails = String(row[3]);
+    var totalPrice = Number(row[2]) || 0;
+    var itemDetails = String(row[3] || "");
     var dateCol = row[4];
 
     var formattedDate = "";
-    if (rawDate instanceof Date) {
-      formattedDate = Utilities.formatDate(rawDate, "GMT+8", "yyyy-MM-dd");
-    }
     if (dateCol) {
       if (dateCol instanceof Date) {
         formattedDate = Utilities.formatDate(dateCol, "GMT+8", "yyyy-MM-dd");
       } else {
-        formattedDate = String(dateCol);
+        var dateStr = String(dateCol).trim().replace(/\//g, '-');
+        var parts = dateStr.split('-');
+        if (parts.length === 3) {
+          formattedDate = parts[0] + '-' + String(parts[1]).padStart(2, '0') + '-' + String(parts[2]).padStart(2, '0');
+        } else {
+          formattedDate = dateStr;
+        }
       }
+    } else if (rawTime instanceof Date) {
+      formattedDate = Utilities.formatDate(rawTime, "GMT+8", "yyyy-MM-dd");
     }
 
-    if (formattedDate === reqDate) {
+    if (username) {
       var parsedItems = parseDetailsToItems(itemDetails);
-      var timeStr = rawDate instanceof Date ? Utilities.formatDate(rawDate, "GMT+8", "HH:mm") : "12:00";
+      var timeStr = rawTime instanceof Date ? Utilities.formatDate(rawTime, "GMT+8", "HH:mm") : "12:00";
 
       orders.push({
         id: "gas-" + i,
         timestamp: timeStr,
-        username: username,
+        date: formattedDate,
+        username: String(username),
         totalPrice: totalPrice,
         items: parsedItems
       });
     }
   }
   return orders;
+}
+
+function getOrdersForDate(ss, reqDate) {
+  var all = getAllOrders(ss);
+  return all.filter(function(o) { return o.date === reqDate; });
 }
 
 function parseDetailsToItems(detailsStr) {

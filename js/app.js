@@ -1127,12 +1127,36 @@ class LunchApp {
       const data = await res.json();
       if (data.status === "success") {
         if (data.menu && data.menu.length > 0) this.menu = data.menu;
-        if (data.orders) this.orders = data.orders;
         if (data.schedule) {
           this.schedule = data.schedule;
           localStorage.setItem("lunch_app_mock_schedule", JSON.stringify(this.schedule));
         }
-        if (data.topUps) this.topUps = data.topUps;
+        if (data.topUps) {
+          this.topUps = data.topUps;
+          localStorage.setItem("lunch_app_mock_topups", JSON.stringify(this.topUps));
+        }
+
+        if (data.orders) {
+          const fetchDate = data.selectedDate || this.currentSelectedDate;
+          // 確保每筆由 GAS 回傳的訂單都含有 date 屬性
+          const incomingOrders = data.orders.map(o => ({
+            ...o,
+            date: o.date || fetchDate
+          }));
+
+          // 判斷回傳資料是否已包含跨日訂單，或明確含有與 fetchDate 不同的 date 標籤
+          const hasMultipleDatesOrExplicitDate = data.orders.some(o => Boolean(o.date) && o.date !== fetchDate);
+
+          if (hasMultipleDatesOrExplicitDate) {
+            // 新版 GAS：回傳所有歷史日期的全量訂單
+            this.orders = incomingOrders;
+          } else {
+            // 舊版 GAS 或單日回應：僅替換 fetchDate 當天的訂單，保留其他日期的歷史紀錄
+            const otherDateOrders = (this.orders || []).filter(o => o.date && o.date !== fetchDate);
+            this.orders = [...incomingOrders, ...otherDateOrders];
+          }
+          this.saveLocalState();
+        }
 
         if (data.restaurantName) {
           const restNameEl = document.getElementById("restaurant-name");
