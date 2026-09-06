@@ -115,19 +115,20 @@ function getAvailableOrderDates() {
   return list;
 }
 
+function normalizeDateStr(dStr) {
+  if (!dStr) return "";
+  const clean = String(dStr).trim().replace(/\//g, '-');
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+  }
+  return clean;
+}
+
 function findScheduleForDate(schedule, targetDate) {
   if (!schedule || !targetDate) return null;
-  const normalize = dStr => {
-    if (!dStr) return "";
-    const clean = String(dStr).trim().replace(/\//g, '-');
-    const parts = clean.split('-');
-    if (parts.length === 3) {
-      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-    }
-    return clean;
-  };
-  const normTarget = normalize(targetDate);
-  return schedule.find(s => normalize(s.date) === normTarget);
+  const normTarget = normalizeDateStr(targetDate);
+  return schedule.find(s => normalizeDateStr(s.date) === normTarget);
 }
 
 const MOCK_SCHEDULE = getAvailableOrderDates().map((item, idx) => {
@@ -175,8 +176,30 @@ class LunchApp {
     this.menu = [...MOCK_XINGYUAN_MENU];
     this.topUps = JSON.parse(localStorage.getItem("lunch_app_mock_topups")) || MOCK_TOPUPS;
     this.orders = JSON.parse(localStorage.getItem("lunch_app_mock_orders")) || MOCK_INITIAL_ORDERS;
+    this.orders = this.sanitizeOrders(this.orders);
 
     this.init();
+  }
+
+  sanitizeOrders(orders) {
+    if (!Array.isArray(orders)) return [];
+    const seenIds = new Set();
+    const result = [];
+    (orders || []).forEach(o => {
+      if (!o || typeof o !== "object") return;
+      const cleanDate = normalizeDateStr(o.date || this.currentSelectedDate);
+      const cleanUsername = String(o.username || "").trim();
+      const id = o.id || `ord-${Date.now()}-${Math.random()}`;
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+      result.push({
+        ...o,
+        id: id,
+        date: cleanDate,
+        username: cleanUsername
+      });
+    });
+    return result;
   }
 
   init() {
@@ -837,6 +860,8 @@ class LunchApp {
 
       return {
         ...ord,
+        date: normalizeDateStr(ord.date),
+        username: String(ord.username || "").trim(),
         totalPrice: totalPrice,
         items: items
       };
@@ -851,14 +876,23 @@ class LunchApp {
 
     this.orders = this.normalizeOrders(this.orders);
 
-    const dateOrders = this.orders.filter(o => !o.date || o.date === this.currentSelectedDate);
+    const targetDateNorm = normalizeDateStr(this.currentSelectedDate);
+    const dateOrders = this.orders.filter(o => normalizeDateStr(o.date || this.currentSelectedDate) === targetDateNorm);
     const activeOrders = dateOrders.filter(o => o.status !== "已取消");
 
     let totalItemCount = 0;
+    let totalAmount = 0;
     activeOrders.forEach(o => {
       o.items.forEach(i => totalItemCount += i.qty);
+      totalAmount += (o.totalPrice || 0);
     });
-    if (countTag) countTag.textContent = `共 ${totalItemCount} 份餐點`;
+    if (countTag) {
+      if (totalAmount > 0) {
+        countTag.textContent = `共 ${totalItemCount} 份餐點，金額總計 $${totalAmount.toLocaleString()}`;
+      } else {
+        countTag.textContent = `共 ${totalItemCount} 份餐點`;
+      }
+    }
 
     if (dateOrders.length === 0) {
       container.innerHTML = `
@@ -979,11 +1013,22 @@ class LunchApp {
   }
 
   copyOverviewText() {
+    this.orders = this.normalizeOrders(this.orders);
+    const targetDateNorm = normalizeDateStr(this.currentSelectedDate);
     const restEl = document.getElementById("restaurant-name");
     const restName = restEl ? restEl.textContent : "杏園";
     let text = `🍱 【${restName} - ${this.currentSelectedDate} 點餐統計】\n----------------------------\n`;
 
-    const activeDateOrders = this.orders.filter(o => (!o.date || o.date === this.currentSelectedDate) && o.status !== "已取消");
+    const activeDateOrders = this.orders.filter(o => normalizeDateStr(o.date || this.currentSelectedDate) === targetDateNorm && o.status !== "已取消");
+
+    let totalItemCount = 0;
+    let totalAmount = 0;
+    activeDateOrders.forEach(ord => {
+      if (Array.isArray(ord.items)) {
+        ord.items.forEach(it => totalItemCount += (it.qty || 0));
+      }
+      totalAmount += (ord.totalPrice || 0);
+    });
 
     if (this.overviewMode === "by-items") {
       const itemMap = {};
@@ -1014,12 +1059,11 @@ class LunchApp {
       });
     }
 
-    const countTag = document.getElementById("total-orders-tag");
-    const countText = countTag ? countTag.textContent : "";
-    text += `----------------------------\n共計：${countText}`;
+    const totalMoneyStr = totalAmount > 0 ? `，金額總計 ${totalAmount.toLocaleString()} 元` : '';
+    text += `----------------------------\n共計：共 ${totalItemCount} 份餐點${totalMoneyStr}`;
 
     navigator.clipboard.writeText(text).then(() => {
-      this.showToast("📋 已成功複製點餐明細！");
+      this.showToast("📋 已成功複製點餐明細與金額總額！");
     }).catch(err => {
       console.error(err);
       this.showToast("複製失敗，請手動複製");
@@ -1326,29 +1370,90 @@ class LunchApp {
         }
 
         if (data.orders) {
-          const fetchDate = data.selectedDate || this.currentSelectedDate;
-          // 確保每筆由 GAS 回傳的訂單都含有 date 屬性
+          const fetchDate = normalizeDateStr(data.selectedDate || this.currentSelectedDate);
+          // 確保每筆由 GAS 回傳的訂單都含有格式化的 date 屬性與乾淨的 username
           const incomingOrders = data.orders.map(o => ({
             ...o,
-            date: o.date || fetchDate
+            date: normalizeDateStr(o.date || fetchDate),
+            username: String(o.username || "").trim()
           }));
 
           // 保留本地建立但尚未在 GAS 列表中出現的訂單 (id 以 ord- 開頭)
-          const localUnsyncedOrders = (this.orders || []).filter(o => o.id && o.id.startsWith("ord-"));
+          const localUnsyncedOrders = (this.orders || [])
+            .filter(o => o.id && o.id.startsWith("ord-"))
+            .map(o => ({
+              ...o,
+              date: normalizeDateStr(o.date || fetchDate),
+              username: String(o.username || "").trim()
+            }));
+
           const incomingIds = new Set(incomingOrders.map(o => o.id));
-          const unsyncedLocal = localUnsyncedOrders.filter(o => !incomingIds.has(o.id));
+
+          // 收集所有已在 GAS 列表中存在的 (username + date) 組合
+          const incomingUserDateSet = new Set(
+            incomingOrders.map(inc => `${inc.username}_${inc.date}`)
+          );
+
+          const matchedIncomingIndexes = new Set();
+
+          const unsyncedLocal = localUnsyncedOrders.filter(loc => {
+            if (incomingIds.has(loc.id)) return false;
+
+            const locDate = loc.date;
+            const userDateKey = `${loc.username}_${locDate}`;
+
+            // 如果 GAS 資料中該使用者當天已有正式訂單，代表本地 ord- 暫存已成功寫入或已在雲端，清除本地暫存避免重複 x2
+            if (incomingUserDateSet.has(userDateKey)) {
+              return false;
+            }
+
+            const locItemsSummary = (loc.items || []).map(i => `${i.name}x${i.qty}`).sort().join("|");
+
+            const matchIndex = incomingOrders.findIndex((inc, idx) => {
+              if (matchedIncomingIndexes.has(idx)) return false;
+
+              const sameUser = inc.username === loc.username;
+              const sameDate = inc.date === locDate;
+              const samePrice = Math.abs((inc.totalPrice || 0) - (loc.totalPrice || 0)) < 0.01;
+
+              if (!sameUser || !sameDate || !samePrice) return false;
+
+              const incItemsSummary = (inc.items || []).map(i => `${i.name}x${i.qty}`).sort().join("|");
+              return locItemsSummary === incItemsSummary || !locItemsSummary || !incItemsSummary;
+            });
+
+            if (matchIndex !== -1) {
+              matchedIncomingIndexes.add(matchIndex);
+              return false;
+            }
+            return true;
+          });
 
           // 判斷回傳資料是否已包含跨日訂單，或明確含有與 fetchDate 不同的 date 標籤
-          const hasMultipleDatesOrExplicitDate = data.orders.some(o => Boolean(o.date) && o.date !== fetchDate);
+          const hasMultipleDatesOrExplicitDate = data.orders.some(o => Boolean(o.date) && normalizeDateStr(o.date) !== fetchDate);
 
+          let combinedOrders = [];
           if (hasMultipleDatesOrExplicitDate) {
             // 新版 GAS：回傳所有歷史日期的全量訂單 + 保留本地未同步訂單
-            this.orders = [...unsyncedLocal, ...incomingOrders];
+            combinedOrders = [...unsyncedLocal, ...incomingOrders];
           } else {
             // 舊版 GAS 或單日回應：僅替換 fetchDate 當天的訂單，保留其他日期的歷史紀錄與本地未同步訂單
-            const otherDateOrders = (this.orders || []).filter(o => o.date && o.date !== fetchDate && !o.id?.startsWith("ord-"));
-            this.orders = [...unsyncedLocal, ...incomingOrders, ...otherDateOrders];
+            const otherDateOrders = (this.orders || []).filter(o => {
+              const d = normalizeDateStr(o.date);
+              return d && d !== fetchDate && !o.id?.startsWith("ord-");
+            });
+            combinedOrders = [...unsyncedLocal, ...incomingOrders, ...otherDateOrders];
           }
+
+          // 依 id 去重，確保不重複載入相同訂單
+          const seenIds = new Set();
+          this.orders = combinedOrders.filter(o => {
+            if (!o.id) return true;
+            if (seenIds.has(o.id)) return false;
+            seenIds.add(o.id);
+            return true;
+          });
+
           this.saveLocalState();
         }
 
