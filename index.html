@@ -44,7 +44,7 @@
       <input type="date" id="custom-date-picker" onchange="app.onCustomDateSelect(this.value)">
     </div>
 
-    <!-- Navigation Tabs -->
+    <!-- Navigation Tabs (Only 3 Tabs now: Ordering, Overview, Treasury) -->
     <nav class="nav-tabs">
       <button class="tab-btn active" data-tab="order-page" onclick="app.switchTab('order-page')">
         <span class="tab-icon">🛒</span>今日/預約點餐
@@ -55,9 +55,6 @@
       <button class="tab-btn" data-tab="treasury-page" onclick="app.switchTab('treasury-page')">
         <span class="tab-icon">💰</span>金庫與儲值
       </button>
-      <button class="tab-btn" data-tab="settings-page" onclick="app.switchTab('settings-page')">
-        <span class="tab-icon">⚙️</span>後端設定
-      </button>
     </nav>
   </header>
 
@@ -66,11 +63,6 @@
 
     <!-- PAGE 1: 今日/預約點餐畫面 -->
     <section id="order-page" class="page-section active">
-      <!-- Demo Notice Bar -->
-      <div id="demo-banner" class="demo-banner">
-        <span>💡 示範模式中。您正預覽 <strong id="demo-date-label">今日</strong> 對應餐廳。切換頂部日期可預約其他天！</span>
-      </div>
-
       <!-- Menu Category Tabs -->
       <div class="category-pills" id="category-pills">
         <button class="pill active" onclick="app.filterCategory('ALL')">全部</button>
@@ -184,59 +176,6 @@
             <!-- Rendered dynamically by JS -->
           </tbody>
         </table>
-      </div>
-    </section>
-
-    <!-- PAGE 4: 後端與 Google Apps Script 設定 -->
-    <section id="settings-page" class="page-section">
-      <div class="settings-card">
-        <h2>⚙️ Google 試算表後端設定 (5 個工作表)</h2>
-        <p class="settings-desc">
-          本系統串接 5 個工作表（餐廳清單、raw紀錄、金庫、累積儲值、飲食規劃）。請貼上您的 Web App URL。
-        </p>
-
-        <div class="form-group">
-          <label for="gas-api-url">Google Apps Script Web App URL</label>
-          <input type="text" id="gas-api-url" placeholder="https://script.google.com/macros/s/.../exec">
-        </div>
-
-        <div class="button-group">
-          <button class="btn btn-primary" onclick="app.saveGasUrl()">💾 儲存並連線</button>
-          <button class="btn btn-outline" onclick="app.testGasUrl()">⚡ 測試連線狀態</button>
-          <button class="btn btn-danger" onclick="app.resetToDemoMode()">🔄 重置為展示模式</button>
-        </div>
-
-        <div id="connection-status" class="status-box hidden"></div>
-      </div>
-
-      <!-- Instruction Accordion / Cards -->
-      <div class="instruction-card">
-        <h3>📄 Google 試算表 5 大頁面結構說明</h3>
-        
-        <div class="sheet-spec">
-          <h4>1. <code>餐廳清單</code></h4>
-          <p>欄位：<code>餐廳名稱</code> | <code>品項名稱</code> | <code>單價</code> | <code>分類</code> | <code>供應狀態</code></p>
-        </div>
-
-        <div class="sheet-spec">
-          <h4>2. <code>raw紀錄</code></h4>
-          <p>欄位：<code>送出時間</code> | <code>姓名</code> | <code>金額</code> | <code>點餐明細</code> | <code>日期</code> | <code>狀態</code></p>
-        </div>
-
-        <div class="sheet-spec">
-          <h4>3. <code>金庫</code></h4>
-          <p>欄位：<code>姓名</code> | <code>現在餘額</code> | <code>累積儲值錢</code> | <code>累積消費</code> | <code>最後更新時間</code></p>
-        </div>
-
-        <div class="sheet-spec">
-          <h4>4. <code>累積儲值</code> ⭐ (NEW!)</h4>
-          <p>欄位：<code>儲值時間</code> | <code>姓名</code> | <code>儲值金額</code> | <code>收款狀態</code> (已收款/未收款) | <code>備註</code></p>
-        </div>
-
-        <div class="sheet-spec">
-          <h4>5. <code>飲食規劃</code> ⭐ (NEW!)</h4>
-          <p>欄位：<code>日期</code> | <code>餐廳名稱</code> | <code>開放狀態</code> | <code>備註</code></p>
-        </div>
       </div>
     </section>
   </main>
