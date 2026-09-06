@@ -76,6 +76,10 @@ function doPost(e) {
         "已確認"
       ]);
 
+      // 動態更新金庫
+      var topUpsData = getTopUpsData(ss);
+      calculateTreasury(ss, topUpsData);
+
       return ContentService
         .createTextOutput(JSON.stringify({ status: "success", message: "Order logged successfully" }))
         .setMimeType(ContentService.MimeType.JSON);
@@ -96,6 +100,9 @@ function doPost(e) {
         status,
         note
       ]);
+
+      var topUpsData = getTopUpsData(ss);
+      calculateTreasury(ss, topUpsData);
 
       return ContentService
         .createTextOutput(JSON.stringify({ status: "success", message: "Top-up logged successfully" }))
@@ -153,6 +160,11 @@ function doPost(e) {
 
       if (foundRow !== -1) {
         rawSheet.getRange(foundRow, 6).setValue("已取消");
+
+        // 取消訂單後重新計算與同步【金庫】頁面
+        var topUpsData = getTopUpsData(ss);
+        calculateTreasury(ss, topUpsData);
+
         return ContentService
           .createTextOutput(JSON.stringify({ status: "success", message: "Order cancelled successfully", row: foundRow }))
           .setMimeType(ContentService.MimeType.JSON);
@@ -488,7 +500,9 @@ function calculateTreasury(ss, topUpsData) {
     var rawData = rawSheet.getDataRange().getValues();
     for (var i = 1; i < rawData.length; i++) {
       var uName = String(rawData[i][1]);
-      var spent = Number(rawData[i][2]) || 0;
+      var spent = parseFloat(String(rawData[i][2] || "").replace(/[^0-9.]/g, "")) || 0;
+      var status = String(rawData[i][5] || "已確認");
+      if (status === "已取消") continue;
       if (uName) {
         if (!treasuryMap[uName]) {
           treasuryMap[uName] = { totalDeposit: 0, totalSpent: 0 };

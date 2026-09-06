@@ -1128,7 +1128,7 @@ class LunchApp {
 
         let totalSpent = 0;
         this.orders.forEach(o => {
-          if (o.username === uName) totalSpent += o.totalPrice;
+          if (o.username === uName && o.status !== "已取消") totalSpent += o.totalPrice;
         });
 
         const currentBalance = approvedDeposit - totalSpent;
@@ -1155,7 +1155,7 @@ class LunchApp {
 
       let myTotalSpent = 0;
       this.orders.forEach(o => {
-        if (o.username === this.currentUser) myTotalSpent += o.totalPrice;
+        if (o.username === this.currentUser && o.status !== "已取消") myTotalSpent += o.totalPrice;
       });
 
       const myBalEl = document.getElementById("treasury-my-balance");
