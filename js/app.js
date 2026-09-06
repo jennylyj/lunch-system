@@ -4,7 +4,7 @@
  */
 
 // 💡【主辦人設定區域】請在此貼上您的 Google Apps Script Web App URL
-const DEFAULT_GAS_URL = "";
+const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbyYlyiRsD4W8NWDydW74EGPQ6GirJVLwj3-uclsc7usTaDPAVKFKDX4K9ylNuOBFDNp/exec";
 
 // 杏園美食 預設 Mock 菜單
 const MOCK_XINGYUAN_MENU = [
