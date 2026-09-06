@@ -116,8 +116,18 @@ function getScheduleData(ss) {
   var sheet = ss.getSheetByName("飲食規劃");
   if (!sheet) return [];
 
-  var data = sheet.getDataRange().getValues();
+  var range = sheet.getDataRange();
+  var data = range.getValues();
   if (data.length <= 1) return [];
+
+  var richText = null;
+  var formulas = null;
+  try {
+    richText = range.getRichTextValues();
+    formulas = range.getFormulas();
+  } catch (e) {
+    // 降級防護
+  }
 
   var schedule = [];
   for (var i = 1; i < data.length; i++) {
@@ -130,8 +140,48 @@ function getScheduleData(ss) {
     var formattedDate = "";
     if (rawDate instanceof Date) {
       formattedDate = Utilities.formatDate(rawDate, "GMT+8", "yyyy-MM-dd");
-    } else {
-      formattedDate = String(rawDate);
+    } else if (rawDate) {
+      var dateStr = String(rawDate).trim().replace(/\//g, '-');
+      var parts = dateStr.split('-');
+      if (parts.length === 3) {
+        var y = parts[0];
+        var m = String(parts[1]).padStart(2, '0');
+        var d = String(parts[2]).padStart(2, '0');
+        formattedDate = y + '-' + m + '-' + d;
+      } else {
+        formattedDate = dateStr;
+      }
+    }
+
+    var groupOrderUrl = "";
+    // 遍歷該列所有欄位 (支援純文字、Hyperlink公式、RichText超連結)
+    for (var col = 0; col < row.length; col++) {
+      // 1. 純文字與正則匹配
+      var cellVal = String(row[col] || "").trim();
+      var urlMatch = cellVal.match(/(https?:\/\/[^\s"'<>]+)/);
+      if (urlMatch) {
+        groupOrderUrl = urlMatch[0];
+        break;
+      }
+
+      // 2. 檢查 RichText 內嵌超連結 (例如使用 Ctrl+K 設定的超連結)
+      if (richText && richText[i] && richText[i][col]) {
+        var link = richText[i][col].getLinkUrl();
+        if (link && (link.indexOf("http://") === 0 || link.indexOf("https://") === 0)) {
+          groupOrderUrl = link;
+          break;
+        }
+      }
+
+      // 3. 檢查 =HYPERLINK("...", "...") 公式
+      if (formulas && formulas[i] && formulas[i][col]) {
+        var formula = String(formulas[i][col]);
+        var formulaMatch = formula.match(/HYPERLINK\s*\(\s*["'](https?:\/\/[^"']+)["']/i);
+        if (formulaMatch) {
+          groupOrderUrl = formulaMatch[1];
+          break;
+        }
+      }
     }
 
     if (formattedDate && restaurantName) {
@@ -139,7 +189,8 @@ function getScheduleData(ss) {
         date: formattedDate,
         restaurantName: String(restaurantName),
         status: String(status),
-        note: String(note)
+        note: String(note),
+        groupOrderUrl: groupOrderUrl
       });
     }
   }
@@ -431,10 +482,10 @@ function setupSheets() {
 
   var schedSheet = ss.getSheetByName("飲食規劃") || ss.insertSheet("飲食規劃");
   schedSheet.clear();
-  schedSheet.appendRow(["日期", "餐廳名稱", "開放狀態", "備註"]);
-  schedSheet.appendRow([todayStr, "台大醫學院 - 杏園", "開放點餐", "今日預設"]);
-  schedSheet.appendRow([tomorrowStr, "公館特色便當", "開放點餐", "明日預約"]);
-  schedSheet.appendRow([nextDayStr, "二活精緻餐盒", "開放點餐", "後天預約"]);
+  schedSheet.appendRow(["日期", "餐廳名稱", "開放狀態", "備註", "團購連結"]);
+  schedSheet.appendRow([todayStr, "台大醫學院 - 杏園", "開放點餐", "今日預設", ""]);
+  schedSheet.appendRow([tomorrowStr, "Uber Eats 麥當勞團購", "開放點餐", "麥當勞團購專案", "https://www.ubereats.com"]);
+  schedSheet.appendRow([nextDayStr, "二活精緻餐盒", "開放點餐", "後天預約", ""]);
 
   // 3. 初始化【累積儲值】
   var topUpSheet = ss.getSheetByName("累積儲值") || ss.insertSheet("累積儲值");

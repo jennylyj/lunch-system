@@ -115,12 +115,39 @@ function getAvailableOrderDates() {
   return list;
 }
 
-const MOCK_SCHEDULE = getAvailableOrderDates().map((item, idx) => ({
-  date: item.date,
-  restaurantName: "台大醫學院 - 杏園",
-  status: "開放點餐",
-  note: `${item.label} 排程`
-}));
+function findScheduleForDate(schedule, targetDate) {
+  if (!schedule || !targetDate) return null;
+  const normalize = dStr => {
+    if (!dStr) return "";
+    const clean = String(dStr).trim().replace(/\//g, '-');
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+    return clean;
+  };
+  const normTarget = normalize(targetDate);
+  return schedule.find(s => normalize(s.date) === normTarget);
+}
+
+const MOCK_SCHEDULE = getAvailableOrderDates().map((item, idx) => {
+  if (idx === 1) {
+    return {
+      date: item.date,
+      restaurantName: "Uber Eats 麥當勞團購",
+      status: "開放點餐",
+      note: "麥當勞外送團購專案",
+      groupOrderUrl: "https://www.ubereats.com"
+    };
+  }
+  return {
+    date: item.date,
+    restaurantName: "台大醫學院 - 杏園",
+    status: "開放點餐",
+    note: `${item.label} 排程`,
+    groupOrderUrl: ""
+  };
+});
 
 const MOCK_TOPUPS = [
   { timestamp: `${getTodayString(0)} 09:00`, username: "小明", amount: 1000, status: "已收款", note: "現金儲值" },
@@ -196,7 +223,7 @@ class LunchApp {
 
     const dateCheck = checkDateOrderable(this.currentSelectedDate);
     const badgeEl = document.getElementById("schedule-status-badge");
-    const currentScheduleItem = this.schedule.find(s => s.date === this.currentSelectedDate);
+    const currentScheduleItem = findScheduleForDate(this.schedule, this.currentSelectedDate);
     const activeRestName = currentScheduleItem ? currentScheduleItem.restaurantName : "台大醫學院 - 杏園";
 
     const restNameEl = document.getElementById("restaurant-name");
@@ -345,11 +372,117 @@ class LunchApp {
 
   renderMenu() {
     const container = document.getElementById("menu-list");
+    const categoryPills = document.getElementById("category-pills");
+    let externalSection = document.getElementById("external-group-order-section");
     if (!container) return;
     container.innerHTML = "";
 
+    // 防呆：若舊版 HTML 快取導致未包含 external-group-order-section，自動動態建立
+    if (!externalSection) {
+      externalSection = document.createElement("div");
+      externalSection.id = "external-group-order-section";
+      externalSection.className = "external-order-card";
+      externalSection.style.display = "none";
+      externalSection.innerHTML = `
+        <div class="external-card-header">
+          <span class="external-badge" style="display: inline-block; background: #06c167; color: white; font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; margin-bottom: 8px;">🛵 Uber Eats / 外部團購</span>
+          <h2 id="external-rest-name" style="font-size: 1.3rem; font-weight: 800; margin-bottom: 6px;">Uber Eats 團購點餐</h2>
+          <p class="external-note" id="external-rest-note" style="font-size: 0.88rem; color: #64748b; line-height: 1.4;">請先點擊下方按鈕前往外部連結完成團購，完成後回到本頁登記您的餐點明細與個人金額。</p>
+        </div>
+        
+        <div class="external-action-box" style="margin: 16px 0 20px 0;">
+          <a id="external-order-btn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-lg btn-block external-link-btn" style="background: linear-gradient(135deg, #06c167 0%, #049b52 100%); color: white; font-size: 1.05rem; font-weight: 700; padding: 14px 20px; border-radius: 8px; text-decoration: none; display: block; text-align: center; box-shadow: 0 4px 12px rgba(6, 193, 103, 0.3);">
+            🚀 點我去點餐 (開啟團購連結)
+          </a>
+        </div>
+
+        <div class="external-form-card" style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 16px;">
+          <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">📝 登記您的點餐金額 (連動金庫扣款)</h3>
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label for="custom-item-name" style="font-weight: 600; display: block; margin-bottom: 4px;">餐點品項 / 備註明細：</label>
+            <input type="text" id="custom-item-name" class="form-input" placeholder="例：大麥克套餐 + 薯條加大 + 可樂" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label for="custom-item-price" style="font-weight: 600; display: block; margin-bottom: 4px;">您在 Uber 點餐的總金額 ($)：</label>
+            <input type="number" id="custom-item-price" class="form-input" placeholder="例：185" min="1" step="1" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
+          </div>
+          <button class="btn btn-success btn-block" onclick="app.submitCustomOrder()" style="width: 100%; padding: 12px; font-size: 1rem; font-weight: bold; border-radius: 8px; background: #059669; color: white; border: none; cursor: pointer;">
+            ✅ 送出金額並記錄到金庫
+          </button>
+        </div>
+      `;
+      const orderPage = document.getElementById("order-page");
+      if (orderPage) {
+        orderPage.insertBefore(externalSection, categoryPills || container);
+      }
+    }
+
     const dateCheck = checkDateOrderable(this.currentSelectedDate);
-    
+    const currentScheduleItem = findScheduleForDate(this.schedule, this.currentSelectedDate);
+
+    // 判斷是否為 Uber Eats 或外部團購模式
+    const isExternalOrder = currentScheduleItem && (
+      Boolean(currentScheduleItem.groupOrderUrl) ||
+      (currentScheduleItem.restaurantName && (/uber/i.test(currentScheduleItem.restaurantName) || currentScheduleItem.restaurantName.includes("團購"))) ||
+      (currentScheduleItem.note && (currentScheduleItem.note.includes("http://") || currentScheduleItem.note.includes("https://")))
+    );
+
+    if (externalSection) {
+      if (isExternalOrder && dateCheck.orderable) {
+        externalSection.style.display = "block";
+        if (categoryPills) categoryPills.style.display = "none";
+        container.style.display = "none";
+
+        const extRestName = document.getElementById("external-rest-name");
+        const extRestNote = document.getElementById("external-rest-note");
+        const extOrderBtn = document.getElementById("external-order-btn");
+
+        const restTitle = currentScheduleItem.restaurantName || "Uber Eats 團購點餐";
+        if (extRestName) extRestName.textContent = restTitle;
+
+        if (extRestNote) {
+          extRestNote.textContent = currentScheduleItem.note ? `${currentScheduleItem.note}。完成 Uber 點餐後，請於下方登記您的餐點明細與個人金額。` : "請先點擊下方按鈕前往外部連結完成團購，完成後回到本頁登記您的餐點明細與個人金額。";
+        }
+
+        let linkUrl = currentScheduleItem ? (currentScheduleItem.groupOrderUrl || "").trim() : "";
+        let isFromSheet = Boolean(linkUrl);
+        if (!linkUrl && currentScheduleItem && currentScheduleItem.note) {
+          const match = currentScheduleItem.note.match(/(https?:\/\/[^\s"'<>]+)/);
+          if (match) {
+            linkUrl = match[0];
+            isFromSheet = true;
+          }
+        }
+        if (!linkUrl && currentScheduleItem && currentScheduleItem.restaurantName) {
+          const match = currentScheduleItem.restaurantName.match(/(https?:\/\/[^\s"'<>]+)/);
+          if (match) {
+            linkUrl = match[0];
+            isFromSheet = true;
+          }
+        }
+        
+        const hasValidCustomUrl = isFromSheet && Boolean(linkUrl);
+        if (!linkUrl) linkUrl = "https://www.ubereats.com";
+
+        if (extOrderBtn) {
+          extOrderBtn.href = linkUrl;
+          if (hasValidCustomUrl) {
+            extOrderBtn.innerHTML = `🚀 點我看團購 / 點餐連結 (開啟網頁)`;
+            extOrderBtn.style.background = "linear-gradient(135deg, #06c167 0%, #049b52 100%)";
+          } else {
+            extOrderBtn.innerHTML = `⚠️ 未偵測到試算表團購連結 (點此預設開啟 Uber 官網)`;
+            extOrderBtn.style.background = "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)";
+          }
+        }
+
+        return;
+      } else {
+        externalSection.style.display = "none";
+        if (categoryPills) categoryPills.style.display = "flex";
+        container.style.display = "block";
+      }
+    }
+
     if (!dateCheck.orderable) {
       container.innerHTML = `
         <div class="overview-card" style="text-align: center; color: #991b1b; background: #fee2e2; padding: 24px;">
@@ -569,6 +702,81 @@ class LunchApp {
     this.updateUserUI();
     this.switchTab("overview-page");
     this.showToast(`🎉 成功預約 ${this.currentSelectedDate} 訂單！消費 $${totalPrice}`);
+  }
+
+  async submitCustomOrder() {
+    if (!this.currentUser) {
+      this.showLoginModal();
+      return;
+    }
+
+    const dateCheck = checkDateOrderable(this.currentSelectedDate);
+    if (!dateCheck.orderable) {
+      this.showToast(`⚠️ 無法送出：${dateCheck.reason}`);
+      return;
+    }
+
+    const itemNameInput = document.getElementById("custom-item-name");
+    const itemPriceInput = document.getElementById("custom-item-price");
+
+    const itemName = itemNameInput ? itemNameInput.value.trim() : "";
+    const itemPrice = itemPriceInput ? parseFloat(itemPriceInput.value) : 0;
+
+    if (!itemName) {
+      this.showToast("⚠️ 請輸入餐點品項明細！");
+      if (itemNameInput) itemNameInput.focus();
+      return;
+    }
+
+    if (isNaN(itemPrice) || itemPrice <= 0) {
+      this.showToast("⚠️ 請輸入有效的消費總金額！");
+      if (itemPriceInput) itemPriceInput.focus();
+      return;
+    }
+
+    const itemDetailsStr = `${itemName} (自訂/Uber團購)`;
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const newOrder = {
+      id: `ord-${Date.now()}`,
+      timestamp: timeStr,
+      date: this.currentSelectedDate,
+      username: this.currentUser,
+      totalPrice: itemPrice,
+      items: [{ name: itemName, price: itemPrice, qty: 1 }]
+    };
+
+    if (this.gasUrl) {
+      this.showToast("⏳ 正在寫入 Google 試算表 (raw紀錄)...");
+      try {
+        await fetch(this.gasUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "submitOrder",
+            username: this.currentUser,
+            totalPrice: itemPrice,
+            itemDetails: itemDetailsStr,
+            orderDate: this.currentSelectedDate,
+            items: [{ name: itemName, price: itemPrice, qty: 1 }]
+          })
+        });
+      } catch (err) {
+        console.warn("GAS POST custom order error:", err);
+      }
+    }
+
+    this.orders.unshift(newOrder);
+    this.saveLocalState();
+
+    if (itemNameInput) itemNameInput.value = "";
+    if (itemPriceInput) itemPriceInput.value = "";
+
+    this.showToast(`🎉 成功登記 $${itemPrice} 團購金額！`);
+    this.updateUserUI();
+    this.switchTab("overview-page");
   }
 
   switchOverviewMode(mode) {
@@ -911,12 +1119,15 @@ class LunchApp {
   async fetchDataFromGas() {
     if (!this.gasUrl) return;
     try {
-      const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}`);
+      const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}&_t=${Date.now()}`);
       const data = await res.json();
       if (data.status === "success") {
         if (data.menu && data.menu.length > 0) this.menu = data.menu;
         if (data.orders) this.orders = data.orders;
-        if (data.schedule) this.schedule = data.schedule;
+        if (data.schedule) {
+          this.schedule = data.schedule;
+          localStorage.setItem("lunch_app_mock_schedule", JSON.stringify(this.schedule));
+        }
         if (data.topUps) this.topUps = data.topUps;
 
         if (data.restaurantName) {
