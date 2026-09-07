@@ -437,9 +437,15 @@ class LunchApp {
             <label for="custom-item-price" style="font-weight: 600; display: block; margin-bottom: 4px;">您在 Uber 點餐的總金額 ($)：</label>
             <input type="number" id="custom-item-price" class="form-input" placeholder="例：185" min="1" step="1" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
           </div>
-          <button class="btn btn-success btn-block" onclick="app.submitCustomOrder()" style="width: 100%; padding: 12px; font-size: 1rem; font-weight: bold; border-radius: 8px; background: #059669; color: white; border: none; cursor: pointer;">
-            ✅ 送出金額並記錄到金庫
-          </button>
+          <div class="custom-order-submit-group" style="display: flex; align-items: center; gap: 10px;">
+            <label class="surgery-checkbox-label" title="這天我上刀，不方便取餐">
+              <input type="checkbox" id="surgery-checkbox-custom" class="surgery-checkbox" onchange="app.toggleSurgery(this.checked)">
+              <span>🔪 上刀</span>
+            </label>
+            <button class="btn btn-success btn-block" onclick="app.submitCustomOrder()" style="flex: 1; padding: 12px; font-size: 1rem; font-weight: bold; border-radius: 8px; background: #059669; color: white; border: none; cursor: pointer;">
+              ✅ 送出金額並記錄到金庫
+            </button>
+          </div>
         </div>
       `;
       const orderPage = document.getElementById("order-page");
@@ -772,6 +778,7 @@ class LunchApp {
     const cleanItemName = itemName.replace(/\s*\([^)]*自訂[^)]*\)+/gi, "").trim();
     const displayItemName = cleanItemName ? `${cleanItemName} (自訂/Uber團購)` : itemName;
 
+    const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const newOrder = {
