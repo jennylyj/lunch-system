@@ -171,6 +171,8 @@ class LunchApp {
     this.cart = {};
     this.activeCategory = "ALL";
     this.overviewMode = "by-items";
+    this.isSurgeonChecked = false;
+    this.dutyOfficersOverride = {};
 
     this.schedule = JSON.parse(localStorage.getItem("lunch_app_mock_schedule")) || MOCK_SCHEDULE;
     this.menu = [...MOCK_XINGYUAN_MENU];
@@ -196,7 +198,9 @@ class LunchApp {
         ...o,
         id: id,
         date: cleanDate,
-        username: cleanUsername
+        username: cleanUsername,
+        status: String(o.status || "已確認").trim(),
+        isSurgeon: Boolean(o.isSurgeon || o.onSurgery || o.surgery)
       });
     });
     return result;
@@ -695,6 +699,7 @@ class LunchApp {
       username: this.currentUser,
       totalPrice: totalPrice,
       status: "已確認",
+      isSurgeon: this.isSurgeonChecked,
       items: cartItems
     };
 
@@ -711,6 +716,7 @@ class LunchApp {
             totalPrice: totalPrice,
             itemDetails: itemDetailsStr,
             orderDate: this.currentSelectedDate,
+            isSurgeon: this.isSurgeonChecked,
             items: cartItems
           })
         });
@@ -722,6 +728,7 @@ class LunchApp {
     this.orders.unshift(newOrder);
     this.saveLocalState();
     this.cart = {};
+    this.toggleSurgery(false);
     this.renderMenu();
     this.updateCartBar();
     const modal = document.getElementById("cart-modal");
@@ -762,8 +769,9 @@ class LunchApp {
       return;
     }
 
-    const itemDetailsStr = `${itemName} (自訂/Uber團購)`;
-    const now = new Date();
+    const cleanItemName = itemName.replace(/\s*\([^)]*自訂[^)]*\)+/gi, "").trim();
+    const displayItemName = cleanItemName ? `${cleanItemName} (自訂/Uber團購)` : itemName;
+
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const newOrder = {
@@ -773,7 +781,8 @@ class LunchApp {
       username: this.currentUser,
       totalPrice: itemPrice,
       status: "已確認",
-      items: [{ name: itemName, price: itemPrice, qty: 1 }]
+      isSurgeon: this.isSurgeonChecked,
+      items: [{ name: displayItemName, price: itemPrice, qty: 1 }]
     };
 
     if (this.gasUrl) {
@@ -787,9 +796,10 @@ class LunchApp {
             action: "submitOrder",
             username: this.currentUser,
             totalPrice: itemPrice,
-            itemDetails: itemDetailsStr,
+            itemDetails: displayItemName,
             orderDate: this.currentSelectedDate,
-            items: [{ name: itemName, price: itemPrice, qty: 1 }]
+            isSurgeon: this.isSurgeonChecked,
+            items: [{ name: displayItemName, price: itemPrice, qty: 1 }]
           })
         });
       } catch (err) {
@@ -799,6 +809,7 @@ class LunchApp {
 
     this.orders.unshift(newOrder);
     this.saveLocalState();
+    this.toggleSurgery(false);
 
     if (itemNameInput) itemNameInput.value = "";
     if (itemPriceInput) itemPriceInput.value = "";
@@ -806,6 +817,14 @@ class LunchApp {
     this.showToast(`🎉 成功登記 $${itemPrice} 團購金額！`);
     this.updateUserUI();
     this.switchTab("overview-page");
+  }
+
+  toggleSurgery(isChecked) {
+    this.isSurgeonChecked = Boolean(isChecked);
+    ["surgery-checkbox-bar", "surgery-checkbox-modal", "surgery-checkbox-custom"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.checked = this.isSurgeonChecked;
+    });
   }
 
   switchOverviewMode(mode) {
@@ -834,7 +853,12 @@ class LunchApp {
       let items = Array.isArray(ord.items) ? ord.items : [];
 
       items = items.map(it => {
-        const name = String(it.name || '').trim();
+        let name = String(it.name || '').trim();
+        // 清理重複出現的 (自訂/Uber團購) 後綴
+        if (name.toLowerCase().includes("自訂/uber團購")) {
+          const baseName = name.replace(/\s*\([^)]*自訂[^)]*\)+/gi, "").trim();
+          name = baseName ? `${baseName} (自訂/Uber團購)` : name;
+        }
         const qty = parseInt(it.qty) || 1;
         let price = parseFloat(String(it.price || 0).replace(/[^0-9.]/g, '')) || 0;
 
@@ -858,11 +882,15 @@ class LunchApp {
         totalPrice = calculatedTotal;
       }
 
+      const status = String(ord.status || "已確認").trim();
+
       return {
         ...ord,
         date: normalizeDateStr(ord.date),
         username: String(ord.username || "").trim(),
+        status: status,
         totalPrice: totalPrice,
+        isSurgeon: Boolean(ord.isSurgeon || ord.onSurgery || ord.surgery),
         items: items
       };
     });
@@ -894,6 +922,8 @@ class LunchApp {
       }
     }
 
+    this.renderDutyOfficerCard();
+
     if (dateOrders.length === 0) {
       container.innerHTML = `
         <div class="overview-card" style="text-align: center; color: var(--text-muted); padding: 30px;">
@@ -906,6 +936,8 @@ class LunchApp {
     const dateCheck = checkDateOrderable(this.currentSelectedDate);
     const currentScheduleItem = findScheduleForDate(this.schedule, this.currentSelectedDate);
     const isLocked = !dateCheck.orderable || (currentScheduleItem && currentScheduleItem.status === "已截止");
+
+    const surgeonsSet = new Set(this.getSurgeonUsers(this.currentSelectedDate));
 
     if (this.overviewMode === "by-items") {
       const itemMap = {};
@@ -931,7 +963,10 @@ class LunchApp {
       }
 
       Object.entries(itemMap).forEach(([itemName, itemInfo]) => {
-        const buyersList = Object.entries(itemInfo.buyers).map(([user, q]) => `${user}${q > 1 ? ` x${q}` : ''}`).join("、");
+        const buyersList = Object.entries(itemInfo.buyers).map(([user, q]) => {
+          const isSurgeon = surgeonsSet.has(user);
+          return `${user}${isSurgeon ? '<span class="surgeon-tag">🔪上刀</span>' : ''}${q > 1 ? ` x${q}` : ''}`;
+        }).join("、");
 
         const card = document.createElement("div");
         card.className = "overview-card";
@@ -966,6 +1001,7 @@ class LunchApp {
       Object.entries(personMap).forEach(([user, data]) => {
         const card = document.createElement("div");
         card.className = "overview-card";
+        const isSurgeon = surgeonsSet.has(user);
 
         let ordersHtml = "";
         data.orders.forEach(ord => {
@@ -1000,7 +1036,7 @@ class LunchApp {
 
         card.innerHTML = `
           <div class="overview-card-header">
-            <span class="item-name-lg">👤 ${user} ${user === this.currentUser ? '<span style="font-size: 0.75rem; color: var(--primary-color); background: var(--primary-light); padding: 2px 6px; border-radius: 10px;">本人</span>' : ''}</span>
+            <span class="item-name-lg">👤 ${user} ${isSurgeon ? '<span class="surgeon-tag">🔪上刀</span>' : ''} ${user === this.currentUser ? '<span style="font-size: 0.75rem; color: var(--primary-color); background: var(--primary-light); padding: 2px 6px; border-radius: 10px;">本人</span>' : ''}</span>
             <span class="user-balance" style="font-size: 0.9rem;">小計 $${data.activeTotal}</span>
           </div>
           <div class="person-orders-list">
@@ -1010,6 +1046,111 @@ class LunchApp {
         container.appendChild(card);
       });
     }
+  }
+
+  getSurgeonUsers(dateStr) {
+    const dateNorm = normalizeDateStr(dateStr || this.currentSelectedDate);
+    const activeOrders = this.orders.filter(o => normalizeDateStr(o.date || dateStr) === dateNorm && o.status !== "已取消");
+    const surgeonSet = new Set();
+    activeOrders.forEach(o => {
+      if (o.isSurgeon) surgeonSet.add(o.username);
+    });
+    return Array.from(surgeonSet);
+  }
+
+  getEligibleDutyUsers(dateStr) {
+    const dateNorm = normalizeDateStr(dateStr || this.currentSelectedDate);
+    const activeOrders = this.orders.filter(o => normalizeDateStr(o.date || dateStr) === dateNorm && o.status !== "已取消");
+    const allUsers = Array.from(new Set(activeOrders.map(o => o.username)));
+    const surgeonUsers = new Set(this.getSurgeonUsers(dateNorm));
+    return allUsers.filter(u => !surgeonUsers.has(u));
+  }
+
+  drawDutyOfficers(dateStr, forceRedraw = false) {
+    const dateNorm = normalizeDateStr(dateStr || this.currentSelectedDate);
+    if (forceRedraw) {
+      this.dutyOfficersOverride[dateNorm] = (this.dutyOfficersOverride[dateNorm] || 0) + 1;
+    }
+
+    const eligible = this.getEligibleDutyUsers(dateNorm);
+    if (eligible.length <= 3) {
+      return eligible;
+    }
+
+    const seedStr = `${dateNorm}_seed_${this.dutyOfficersOverride[dateNorm] || 0}`;
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      hash = (hash << 5) - hash + seedStr.charCodeAt(i);
+      hash |= 0;
+    }
+
+    const prng = () => {
+      hash = Math.sin(hash) * 10000;
+      return hash - Math.floor(hash);
+    };
+
+    const pool = [...eligible];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(prng() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    return pool.slice(0, 3);
+  }
+
+  confirmRedrawDutyOfficers() {
+    if (confirm("⚠️ 確定要重新隨機洗牌抽換今日的值日生嗎？")) {
+      this.drawDutyOfficers(this.currentSelectedDate, true);
+      this.renderOverview();
+      this.showToast("🎲 已重新抽出今日值日生！");
+    }
+  }
+
+  renderDutyOfficerCard() {
+    const cardContainer = document.getElementById("duty-officer-card");
+    if (!cardContainer) return;
+
+    const targetDateNorm = normalizeDateStr(this.currentSelectedDate);
+    const activeOrders = this.orders.filter(o => normalizeDateStr(o.date || this.currentSelectedDate) === targetDateNorm && o.status !== "已取消");
+
+    if (activeOrders.length === 0) {
+      cardContainer.style.display = "none";
+      return;
+    }
+
+    cardContainer.style.display = "block";
+    const dutyOfficers = this.drawDutyOfficers(this.currentSelectedDate);
+    const surgeons = this.getSurgeonUsers(this.currentSelectedDate);
+
+    const dutyNamesHtml = dutyOfficers.length > 0
+      ? dutyOfficers.map(name => `<span class="duty-officer-badge">🍱 ${name}</span>`).join(" ")
+      : `<span style="font-size: 0.9rem; color: #64748b;">無 (當日訂餐者皆已勾選上刀)</span>`;
+
+    let surgeonHtml = "";
+    if (surgeons.length > 0) {
+      surgeonHtml = `
+        <div class="surgeon-info-box">
+          <span>🔪 上刀免除取餐：</span>
+          <strong>${surgeons.join("、")}</strong>
+          <span> (辛苦了！)</span>
+        </div>
+      `;
+    }
+
+    cardContainer.innerHTML = `
+      <div class="duty-officer-header">
+        <div class="duty-officer-title">
+          <span>🍱 今日值日生 (取餐人員)</span>
+        </div>
+        <button class="btn btn-sm btn-outline" style="font-size: 0.8rem; padding: 4px 10px;" onclick="app.confirmRedrawDutyOfficers()">
+          🎲 重新抽籤
+        </button>
+      </div>
+      <div class="duty-officer-names">
+        ${dutyNamesHtml}
+      </div>
+      ${surgeonHtml}
+    `;
   }
 
   copyOverviewText() {
@@ -1060,7 +1201,19 @@ class LunchApp {
     }
 
     const totalMoneyStr = totalAmount > 0 ? `，金額總計 ${totalAmount.toLocaleString()} 元` : '';
-    text += `----------------------------\n共計：共 ${totalItemCount} 份餐點${totalMoneyStr}`;
+    text += `----------------------------\n共計：共 ${totalItemCount} 份餐點${totalMoneyStr}\n----------------------------\n`;
+
+    const dutyOfficers = this.drawDutyOfficers(this.currentSelectedDate);
+    const surgeons = this.getSurgeonUsers(this.currentSelectedDate);
+
+    if (dutyOfficers.length > 0) {
+      text += `今天的擡便當值日生：${dutyOfficers.join("、")}\n感謝你們🫶\n`;
+    } else {
+      text += `今天的擡便當值日生：無\n`;
+    }
+    if (surgeons.length > 0) {
+      text += `(🔪 上刀：${surgeons.join("、")}，辛苦了！)\n`;
+    }
 
     navigator.clipboard.writeText(text).then(() => {
       this.showToast("📋 已成功複製點餐明細與金額總額！");

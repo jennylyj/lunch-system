@@ -63,6 +63,7 @@ function doPost(e) {
       var totalPrice = contents.totalPrice || 0;
       var itemDetails = contents.itemDetails || "";
       var orderDate = contents.orderDate || Utilities.formatDate(new Date(), "GMT+8", "yyyy-MM-dd");
+      var isSurgeon = Boolean(contents.isSurgeon);
       var now = new Date();
 
       // 寫入 raw紀錄
@@ -73,7 +74,8 @@ function doPost(e) {
         totalPrice,
         itemDetails,
         orderDate,
-        "已確認"
+        "已確認",
+        isSurgeon ? "上刀" : ""
       ]);
 
       // 動態更新金庫
@@ -134,7 +136,7 @@ function doPost(e) {
         for (var i = data.length - 1; i >= 1; i--) {
           var rUser = String(data[i][1]).trim();
           var rawDateCol = data[i][4];
-          var rStatus = String(data[i][5] || "已確認");
+          var rStatus = String(data[i][5] || "已確認").trim();
           var rDate = "";
           if (rawDateCol instanceof Date) {
             rDate = Utilities.formatDate(rawDateCol, "GMT+8", "yyyy-MM-dd");
@@ -377,7 +379,8 @@ function getAllOrders(ss) {
       formattedDate = Utilities.formatDate(rawTime, "GMT+8", "yyyy-MM-dd");
     }
 
-    var orderStatus = String(row[5] || "已確認");
+    var orderStatus = String(row[5] || "已確認").trim();
+    var isSurgeonCol = String(row[6] || "").indexOf("上刀") !== -1 || row[6] === true;
 
     if (username) {
       var parsedItems = parseDetailsToItems(itemDetails, totalPrice, menuList);
@@ -397,6 +400,7 @@ function getAllOrders(ss) {
         username: String(username),
         totalPrice: totalPrice,
         status: orderStatus,
+        isSurgeon: isSurgeonCol,
         items: parsedItems
       });
     }
@@ -501,7 +505,7 @@ function calculateTreasury(ss, topUpsData) {
     for (var i = 1; i < rawData.length; i++) {
       var uName = String(rawData[i][1]);
       var spent = parseFloat(String(rawData[i][2] || "").replace(/[^0-9.]/g, "")) || 0;
-      var status = String(rawData[i][5] || "已確認");
+      var status = String(rawData[i][5] || "已確認").trim();
       if (status === "已取消") continue;
       if (uName) {
         if (!treasuryMap[uName]) {

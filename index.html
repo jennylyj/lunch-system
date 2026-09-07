@@ -87,9 +87,15 @@
             <label for="custom-item-price" style="font-weight: 600; display: block; margin-bottom: 4px;">您在 Uber 點餐的總金額 ($)：</label>
             <input type="number" id="custom-item-price" class="form-input" placeholder="例：185" min="1" step="1" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
           </div>
-          <button class="btn btn-success btn-block" onclick="app.submitCustomOrder()" style="width: 100%; padding: 12px; font-size: 1rem; font-weight: bold; border-radius: 8px; background: #059669; color: white; border: none; cursor: pointer;">
-            ✅ 送出金額並記錄到金庫
-          </button>
+          <div class="custom-order-submit-group" style="display: flex; align-items: center; gap: 10px;">
+            <label class="surgery-checkbox-label" title="這天我上刀，不方便取餐">
+              <input type="checkbox" id="surgery-checkbox-custom" class="surgery-checkbox" onchange="app.toggleSurgery(this.checked)">
+              <span>🔪 上刀</span>
+            </label>
+            <button class="btn btn-success btn-block" onclick="app.submitCustomOrder()" style="flex: 1; padding: 12px; font-size: 1rem; font-weight: bold; border-radius: 8px; background: #059669; color: white; border: none; cursor: pointer;">
+              ✅ 送出金額並記錄到金庫
+            </button>
+          </div>
         </div>
       </div>
 
@@ -134,6 +140,11 @@
         <button class="btn btn-secondary" onclick="app.refreshData()">
           🔄 重新整理資料
         </button>
+      </div>
+
+      <!-- Duty Officer Section Card -->
+      <div id="duty-officer-card" class="duty-officer-card">
+        <!-- Rendered dynamically by JS -->
       </div>
 
       <!-- Overview Content -->
@@ -221,9 +232,15 @@
         <span class="cart-detail-hint">點擊查看餐點明細</span>
       </div>
     </div>
-    <button class="btn btn-success checkout-btn" onclick="app.submitOrder()">
-      送出訂購 🚀
-    </button>
+    <div class="cart-action-group">
+      <label class="surgery-checkbox-label" title="這天我上刀，不方便取餐">
+        <input type="checkbox" id="surgery-checkbox-bar" class="surgery-checkbox" onchange="app.toggleSurgery(this.checked)">
+        <span>🔪 上刀</span>
+      </label>
+      <button class="btn btn-success checkout-btn" onclick="app.submitOrder()">
+        送出訂購 🚀
+      </button>
+    </div>
   </div>
 
   <!-- Modal 1: 登入 / 切換使用者 -->
@@ -276,7 +293,13 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="app.clearCart()">清空餐點</button>
-        <button class="btn btn-success" onclick="app.submitOrder()">確認送出訂單</button>
+        <div class="modal-submit-group">
+          <label class="surgery-checkbox-label" title="這天我上刀，不方便取餐">
+            <input type="checkbox" id="surgery-checkbox-modal" class="surgery-checkbox" onchange="app.toggleSurgery(this.checked)">
+            <span>🔪 上刀</span>
+          </label>
+          <button class="btn btn-success" onclick="app.submitOrder()">確認送出訂單</button>
+        </div>
       </div>
     </div>
   </div>
