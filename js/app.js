@@ -207,6 +207,29 @@ class LunchApp {
     this.init();
   }
 
+  sanitizeOrders(orders) {
+    if (!Array.isArray(orders)) return [];
+    const seenIds = new Set();
+    const result = [];
+    (orders || []).forEach(o => {
+      if (!o || typeof o !== "object") return;
+      const cleanDate = normalizeDateStr(o.date || this.currentSelectedDate);
+      const cleanUsername = String(o.username || "").trim();
+      const id = o.id || `ord-${Date.now()}-${Math.random()}`;
+      if (seenIds.has(id)) return;
+      seenIds.add(id);
+      result.push({
+        ...o,
+        id: id,
+        date: cleanDate,
+        username: cleanUsername,
+        status: String(o.status || "已確認").trim(),
+        isSurgeon: Boolean(o.isSurgeon || o.onSurgery || o.surgery)
+      });
+    });
+    return result;
+  }
+
   updateGroupKeyBadge() {
     const badge = document.getElementById("group-key-badge");
     if (!badge) return;
