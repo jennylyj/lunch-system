@@ -168,7 +168,18 @@ const MOCK_TOPUPS = [
   { timestamp: `${getTodayString(0)} 10:00`, username: "陳捷翐", amount: 1000, status: "已收款", note: "現金儲值" }
 ];
 
-const MOCK_INITIAL_ORDERS = [];
+function safeParseArray(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch (e) {
+    console.warn(`localStorage parse error for ${key}:`, e);
+    try { localStorage.removeItem(key); } catch (err) {}
+    return fallback;
+  }
+}
 
 class LunchApp {
   constructor() {
@@ -187,10 +198,10 @@ class LunchApp {
     this.isSurgeonChecked = false;
     this.dutyOfficersOverride = {};
 
-    this.schedule = JSON.parse(localStorage.getItem("lunch_app_mock_schedule")) || MOCK_SCHEDULE;
+    this.schedule = safeParseArray("lunch_app_mock_schedule", MOCK_SCHEDULE);
     this.menu = [...MOCK_XINGYUAN_MENU];
-    this.topUps = JSON.parse(localStorage.getItem("lunch_app_mock_topups")) || MOCK_TOPUPS;
-    this.orders = JSON.parse(localStorage.getItem("lunch_app_mock_orders")) || MOCK_INITIAL_ORDERS;
+    this.topUps = safeParseArray("lunch_app_mock_topups", MOCK_TOPUPS);
+    this.orders = safeParseArray("lunch_app_mock_orders", MOCK_INITIAL_ORDERS);
     this.orders = this.sanitizeOrders(this.orders);
 
     this.init();
@@ -333,17 +344,18 @@ class LunchApp {
   }
 
   getUserCalculatedBalance(username) {
+    if (!username) return 0;
     let approvedDeposit = 0;
-    this.topUps.forEach(t => {
-      if (t.username === username && t.status === "已收款") {
-        approvedDeposit += t.amount;
+    (this.topUps || []).forEach(t => {
+      if (t && t.username === username && t.status === "已收款") {
+        approvedDeposit += Number(t.amount) || 0;
       }
     });
 
     let totalSpent = 0;
-    this.orders.forEach(o => {
-      if (o.username === username && o.status !== "已取消") {
-        totalSpent += o.totalPrice;
+    (this.orders || []).forEach(o => {
+      if (o && o.username === username && o.status !== "已取消") {
+        totalSpent += Number(o.totalPrice) || 0;
       }
     });
 
@@ -1766,6 +1778,22 @@ class LunchApp {
 
 // Global App Instance
 let app;
-document.addEventListener("DOMContentLoaded", () => {
-  app = new LunchApp();
-});
+function startApp() {
+  try {
+    app = new LunchApp();
+  } catch (err) {
+    console.error("Critical error starting LunchApp, resetting cache:", err);
+    try {
+      localStorage.removeItem("lunch_app_mock_orders");
+      localStorage.removeItem("lunch_app_mock_schedule");
+      localStorage.removeItem("lunch_app_mock_topups");
+    } catch (e) {}
+    app = new LunchApp();
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startApp);
+} else {
+  startApp();
+}
