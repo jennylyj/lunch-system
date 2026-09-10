@@ -5,6 +5,17 @@
 
 // 💡【主辦人設定區域】請在此貼上您的 Google Apps Script Web App URL
 const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbyluRniu4RRRg8YBnmMMx_uMHBjJrKtZ8_to2h9FvT0ZExV6h0dz4WzzgQeZdnpo6eP/exec";
+const DEFAULT_GROUP_KEY = "";
+
+function escapeHTML(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 // 杏園美食 預設 Mock 菜單
 const MOCK_XINGYUAN_MENU = [
@@ -163,6 +174,7 @@ class LunchApp {
   constructor() {
     this.currentUser = localStorage.getItem("lunch_app_user") || null;
     this.gasUrl = localStorage.getItem("lunch_app_gas_url") || DEFAULT_GAS_URL || "";
+    this.groupKey = localStorage.getItem("lunch_app_group_key") || DEFAULT_GROUP_KEY || "";
     
     const availableDates = getAvailableOrderDates();
     const todayCheck = checkDateOrderable(getTodayString(0));
@@ -370,6 +382,36 @@ class LunchApp {
     this.renderTreasury();
     this.closeLoginModal();
     this.showToast(`👋 歡迎，${username}！`);
+  }
+
+  showGroupKeyModal() {
+    const input = document.getElementById("group-key-input");
+    if (input) {
+      input.value = this.groupKey || DEFAULT_GROUP_KEY;
+    }
+    const modal = document.getElementById("group-key-modal");
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  closeGroupKeyModal() {
+    const modal = document.getElementById("group-key-modal");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  saveGroupKey() {
+    const input = document.getElementById("group-key-input");
+    const val = input ? input.value.trim() : "";
+    if (!val) {
+      this.showToast("⚠️ 請輸入有效的群組通行碼！");
+      return;
+    }
+    this.groupKey = val;
+    localStorage.setItem("lunch_app_group_key", val);
+    this.closeGroupKeyModal();
+    this.showToast("✅ 已儲存群組通行碼！正在重新同步...");
+    if (this.gasUrl) {
+      this.fetchDataFromGas();
+    }
   }
 
   switchTab(tabId) {
@@ -718,6 +760,7 @@ class LunchApp {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "submitOrder",
+            key: this.groupKey || DEFAULT_GROUP_KEY,
             username: this.currentUser,
             totalPrice: totalPrice,
             itemDetails: itemDetailsStr,
@@ -801,6 +844,7 @@ class LunchApp {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "submitOrder",
+            key: this.groupKey || DEFAULT_GROUP_KEY,
             username: this.currentUser,
             totalPrice: itemPrice,
             itemDetails: displayItemName,
@@ -1298,6 +1342,7 @@ class LunchApp {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "cancelOrder",
+            key: this.groupKey || DEFAULT_GROUP_KEY,
             orderId: order.id,
             username: order.username,
             orderDate: order.date || this.currentSelectedDate
@@ -1342,7 +1387,7 @@ class LunchApp {
         if (isCurrent) tr.className = "highlight-user";
 
         tr.innerHTML = `
-          <td>${uName} ${isCurrent ? '⭐' : ''}</td>
+          <td>${escapeHTML(uName)} ${isCurrent ? '⭐' : ''}</td>
           <td style="color: ${currentBalance < 0 ? '#ef4444' : 'var(--primary-color)'}; font-weight: 700;">$${currentBalance}</td>
           <td>$${approvedDeposit}</td>
           <td>$${totalSpent}</td>
@@ -1379,14 +1424,14 @@ class LunchApp {
       this.topUps.forEach(t => {
         const tr = document.createElement("tr");
         const isApproved = t.status === "已收款";
-        const statusBadge = `<span class="${isApproved ? 'badge-status-approved' : 'badge-status-pending'}">${t.status}</span>`;
+        const statusBadge = `<span class="${isApproved ? 'badge-status-approved' : 'badge-status-pending'}">${escapeHTML(t.status)}</span>`;
 
         tr.innerHTML = `
-          <td>${t.timestamp}</td>
-          <td>${t.username}</td>
+          <td>${escapeHTML(t.timestamp)}</td>
+          <td>${escapeHTML(t.username)}</td>
           <td style="font-weight: 700;">+$${t.amount}</td>
           <td>${statusBadge}</td>
-          <td style="color: var(--text-muted); font-size: 0.8rem;">${t.note || '-'}</td>
+          <td style="color: var(--text-muted); font-size: 0.8rem;">${escapeHTML(t.note || '-')}</td>
         `;
         topupTbody.appendChild(tr);
       });
@@ -1441,6 +1486,7 @@ class LunchApp {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action: "addTopUp",
+            key: this.groupKey || DEFAULT_GROUP_KEY,
             username: uName,
             amount: amount,
             note: note,
@@ -1490,13 +1536,16 @@ class LunchApp {
     }
 
     try {
-      const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}`);
+      const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}&key=${encodeURIComponent(this.groupKey || DEFAULT_GROUP_KEY)}`);
       const data = await res.json();
       if (data.status === "success") {
         if (statusBox) {
           statusBox.className = "status-box success";
           statusBox.textContent = `✅ 連線成功！`;
         }
+      } else if (data.code === "UNAUTHORIZED") {
+        this.showGroupKeyModal();
+        throw new Error("群組通行碼 (Key) 無效，請輸入正確暗號");
       } else {
         throw new Error(data.message || "未知回應");
       }
@@ -1511,8 +1560,13 @@ class LunchApp {
   async fetchDataFromGas() {
     if (!this.gasUrl) return;
     try {
-      const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}&_t=${Date.now()}`);
+      const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}&key=${encodeURIComponent(this.groupKey || DEFAULT_GROUP_KEY)}&_t=${Date.now()}`);
       const data = await res.json();
+      if (data.code === "UNAUTHORIZED") {
+        this.showGroupKeyModal();
+        this.showToast("⚠️ 群組通行碼無效或未驗證，請輸入正確暗號");
+        return;
+      }
       if (data.status === "success") {
         if (data.menu && data.menu.length > 0) this.menu = data.menu;
         if (data.schedule) {

@@ -1,18 +1,61 @@
 /**
  * ============================================================================
- * 訂餐系統 (Lunch Ordering System) - Google Apps Script (GAS) 後端腳本 v2.0
+ * 訂餐系統 (Lunch Ordering System) - Google Apps Script (GAS) 後端腳本 v2.4
  * 
- * 新增功能：
- * 1. 【累積儲值】工作表：記錄儲值時間、姓名、金額與收款狀態（已收款/未收款）。
- * 2. 【飲食規劃】工作表：依日期安排不同餐廳，前端可切換日期並自動連動餐廳與菜單！
- * 3. 動態計算金庫【現在餘額】= 累積儲值（僅採計已收款）- 累積消費。
+ * 新增安全防護：
+ * 1. API 密鑰驗證 (API Key Authentication)
+ * 2. 試算表公式注入防護 (Sheet Formula Injection Protection)
  * ============================================================================
  */
 
+var DEFAULT_API_KEY = "";
+
+function getStoredApiKey() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var key = props.getProperty("API_KEY");
+    return key ? key : DEFAULT_API_KEY;
+  } catch (e) {
+    return DEFAULT_API_KEY;
+  }
+}
+
+function isValidKey(providedKey) {
+  var expectedKey = getStoredApiKey();
+  if (!expectedKey) return true;
+  return String(providedKey || "").trim() === String(expectedKey).trim();
+}
+
+function setupApiKey(newKey) {
+  var keyToSet = newKey ? String(newKey).trim() : "";
+  PropertiesService.getScriptProperties().setProperty("API_KEY", keyToSet);
+  Logger.log("API_KEY 成功設定並安全儲存於 ScriptProperties");
+}
+
+function sanitizeForSheets(val) {
+  if (typeof val !== 'string') return val;
+  var trimmed = val.trim();
+  if (/^[=+\-@]/.test(trimmed)) {
+    return "'" + trimmed;
+  }
+  return trimmed;
+}
+
 // GET 請求處理
 function doGet(e) {
-  var action = e.parameter.action || "getInitData";
-  var reqDate = e.parameter.date || Utilities.formatDate(new Date(), "GMT+8", "yyyy-MM-dd");
+  var reqKey = (e && e.parameter) ? e.parameter.key : "";
+  if (!isValidKey(reqKey)) {
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        status: "error",
+        code: "UNAUTHORIZED",
+        message: "通行碼驗證失敗：無效或未提供群組暗號 (Key)"
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var action = (e && e.parameter && e.parameter.action) || "getInitData";
+  var reqDate = (e && e.parameter && e.parameter.date) || Utilities.formatDate(new Date(), "GMT+8", "yyyy-MM-dd");
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
   if (action === "getInitData") {
@@ -55,6 +98,17 @@ function doGet(e) {
 function doPost(e) {
   try {
     var contents = JSON.parse(e.postData.contents);
+    var reqKey = contents ? contents.key : "";
+    if (!isValidKey(reqKey)) {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          status: "error",
+          code: "UNAUTHORIZED",
+          message: "通行碼驗證失敗：無效或未提供群組暗號 (Key)"
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     var action = contents.action;
     var ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -70,9 +124,9 @@ function doPost(e) {
       var rawSheet = ss.getSheetByName("raw紀錄") || ss.insertSheet("raw紀錄");
       rawSheet.appendRow([
         now,
-        username,
+        sanitizeForSheets(username),
         totalPrice,
-        itemDetails,
+        sanitizeForSheets(itemDetails),
         orderDate,
         "已確認",
         isSurgeon ? "上刀" : ""
@@ -97,10 +151,10 @@ function doPost(e) {
       var topUpSheet = ss.getSheetByName("累積儲值") || ss.insertSheet("累積儲值");
       topUpSheet.appendRow([
         now,
-        username,
+        sanitizeForSheets(username),
         amount,
         status,
-        note
+        sanitizeForSheets(note)
       ]);
 
       var topUpsData = getTopUpsData(ss);

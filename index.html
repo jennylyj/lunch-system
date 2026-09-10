@@ -264,9 +264,36 @@
             <button class="user-chip" onclick="app.quickLogin('陳捷翐')">陳捷翐</button>
           </div>
         </div>
+        <div style="margin-top: 14px; text-align: right;">
+          <button class="btn btn-sm btn-outline" style="font-size: 0.85rem; border-color: #cbd5e1; color: #475569;" onclick="app.showGroupKeyModal()">🔑 設定群組通行碼</button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary btn-block" onclick="app.confirmLogin()">確認進入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 5: 群組通行碼 (暗號) 彈窗 -->
+  <div id="group-key-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>🔐 輸入群組通行碼 (暗號)</h3>
+        <button class="close-btn" onclick="app.closeGroupKeyModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">此系統已啟用安全防範機制。請輸入全班統一的群組通行碼：</p>
+        <div class="form-group">
+          <label for="group-key-input" style="font-weight: 600; display: block; margin-bottom: 6px;">通行碼 (Group Key)：</label>
+          <input type="password" id="group-key-input" class="form-input" placeholder="例如：med3lunch2026" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
+        </div>
+        <p style="font-size: 0.82rem; color: #64748b; margin-top: 8px;">
+          💡 輸入正確的通行碼後，系統會自動儲存於此瀏覽器，並開放菜單讀取與點餐功能。
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="app.closeGroupKeyModal()">取消</button>
+        <button class="btn btn-primary" onclick="app.saveGroupKey()">確認儲存並同步</button>
       </div>
     </div>
   </div>
