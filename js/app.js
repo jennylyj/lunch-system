@@ -223,6 +223,7 @@ class LunchApp {
     this.updateUserUI();
     this.renderDateSwitcher();
     this.updateGroupKeyBadge();
+    this.renderAllViews();
 
     const gasInput = document.getElementById("gas-api-url");
     if (gasInput && this.gasUrl) {
@@ -235,8 +236,6 @@ class LunchApp {
 
     if (this.gasUrl) {
       this.fetchDataFromGas();
-    } else {
-      this.renderAllViews();
     }
   }
 
@@ -1587,6 +1586,7 @@ class LunchApp {
       if (data.code === "UNAUTHORIZED") {
         this.isKeyValid = false;
         this.updateGroupKeyBadge();
+        this.renderAllViews();
         this.showGroupKeyModal();
         this.showToast("⚠️ 群組通行碼無效或未驗證，請點擊上方按鈕輸入暗號！");
         return;
