@@ -161,12 +161,7 @@ const MOCK_SCHEDULE = getAvailableOrderDates().map((item, idx) => {
   };
 });
 
-const MOCK_TOPUPS = [
-  { timestamp: `${getTodayString(0)} 09:00`, username: "小明", amount: 1000, status: "已收款", note: "現金儲值" },
-  { timestamp: `${getTodayString(0)} 09:15`, username: "小華", amount: 500, status: "已收款", note: "LINE Pay" },
-  { timestamp: `${getTodayString(0)} 09:30`, username: "老張", amount: 1500, status: "已收款", note: "銀行轉帳" },
-  { timestamp: `${getTodayString(0)} 10:00`, username: "陳捷翐", amount: 1000, status: "已收款", note: "現金儲值" }
-];
+const MOCK_TOPUPS = [];
 
 const MOCK_INITIAL_ORDERS = [];
 

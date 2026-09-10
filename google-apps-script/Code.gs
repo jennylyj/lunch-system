@@ -678,19 +678,11 @@ function setupSheets() {
   var topUpSheet = ss.getSheetByName("累積儲值") || ss.insertSheet("累積儲值");
   topUpSheet.clear();
   topUpSheet.appendRow(["儲值時間", "姓名", "儲值金額", "收款狀態", "備註"]);
-  topUpSheet.appendRow([todayStr + " 09:00", "小明", 1000, "已收款", "現金儲值"]);
-  topUpSheet.appendRow([todayStr + " 09:15", "小華", 500, "已收款", "LINE Pay"]);
-  topUpSheet.appendRow([todayStr + " 09:30", "老張", 1500, "已收款", "銀行轉帳"]);
-  topUpSheet.appendRow([todayStr + " 10:00", "陳捷翐", 1000, "已收款", "現金儲值"]);
-  topUpSheet.appendRow([todayStr + " 10:15", "小明", 500, "未收款", "待主管確認"]);
 
   // 4. 初始化【raw紀錄】
   var rawSheet = ss.getSheetByName("raw紀錄") || ss.insertSheet("raw紀錄");
   if (rawSheet.getLastRow() === 0) {
     rawSheet.appendRow(["送出時間", "姓名", "總金額", "點餐明細", "日期", "狀態"]);
-    rawSheet.appendRow([todayStr + " 10:20", "小明", 175, "椒麻雞腿飯 x1, 蘿蔔貢丸湯 x1", todayStr, "已確認"]);
-    rawSheet.appendRow([todayStr + " 10:30", "小華", 195, "椒麻雞腿飯 x1, 酢醬飯 x1", todayStr, "已確認"]);
-    rawSheet.appendRow([todayStr + " 10:45", "老張", 100, "牛肉麵 / 米粉 x1", todayStr, "已確認"]);
   }
 
   // 5. 初始化【金庫】
