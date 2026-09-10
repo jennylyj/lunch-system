@@ -168,6 +168,8 @@ const MOCK_TOPUPS = [
   { timestamp: `${getTodayString(0)} 10:00`, username: "陳捷翐", amount: 1000, status: "已收款", note: "現金儲值" }
 ];
 
+const MOCK_INITIAL_ORDERS = [];
+
 function safeParseArray(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
