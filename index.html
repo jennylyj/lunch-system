@@ -22,7 +22,10 @@
         <span class="brand-icon">🍱</span>
         <div class="brand-info">
           <h1 id="restaurant-name">台大醫學院 - 杏園</h1>
-          <div class="schedule-status-badge" id="schedule-status-badge">開放點餐中</div>
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px;">
+            <div class="schedule-status-badge" id="schedule-status-badge">開放點餐中</div>
+            <div class="schedule-status-badge" id="group-key-badge" onclick="app.showGroupKeyModal()" style="cursor: pointer; background: #fef3c7; color: #92400e;">🔑 未設定通行碼</div>
+          </div>
         </div>
       </div>
       <div class="user-badge" id="user-badge" onclick="app.showLoginModal()">

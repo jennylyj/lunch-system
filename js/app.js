@@ -175,6 +175,7 @@ class LunchApp {
     this.currentUser = localStorage.getItem("lunch_app_user") || null;
     this.gasUrl = localStorage.getItem("lunch_app_gas_url") || DEFAULT_GAS_URL || "";
     this.groupKey = localStorage.getItem("lunch_app_group_key") || DEFAULT_GROUP_KEY || "";
+    this.isKeyValid = null;
     
     const availableDates = getAvailableOrderDates();
     const todayCheck = checkDateOrderable(getTodayString(0));
@@ -195,32 +196,33 @@ class LunchApp {
     this.init();
   }
 
-  sanitizeOrders(orders) {
-    if (!Array.isArray(orders)) return [];
-    const seenIds = new Set();
-    const result = [];
-    (orders || []).forEach(o => {
-      if (!o || typeof o !== "object") return;
-      const cleanDate = normalizeDateStr(o.date || this.currentSelectedDate);
-      const cleanUsername = String(o.username || "").trim();
-      const id = o.id || `ord-${Date.now()}-${Math.random()}`;
-      if (seenIds.has(id)) return;
-      seenIds.add(id);
-      result.push({
-        ...o,
-        id: id,
-        date: cleanDate,
-        username: cleanUsername,
-        status: String(o.status || "已確認").trim(),
-        isSurgeon: Boolean(o.isSurgeon || o.onSurgery || o.surgery)
-      });
-    });
-    return result;
+  updateGroupKeyBadge() {
+    const badge = document.getElementById("group-key-badge");
+    if (!badge) return;
+
+    if (!this.groupKey) {
+      badge.textContent = "🔑 未設定暗號 (點此輸入)";
+      badge.style.background = "#fef3c7";
+      badge.style.color = "#92400e";
+    } else if (this.isKeyValid === false) {
+      badge.textContent = "🔒 暗號錯誤 (點此修改)";
+      badge.style.background = "#fee2e2";
+      badge.style.color = "#991b1b";
+    } else if (this.isKeyValid === true) {
+      badge.textContent = "🔑 暗號已驗證";
+      badge.style.background = "#dcfce7";
+      badge.style.color = "#166534";
+    } else {
+      badge.textContent = "🔑 暗號已儲存";
+      badge.style.background = "#e2e8f0";
+      badge.style.color = "#475569";
+    }
   }
 
   init() {
     this.updateUserUI();
     this.renderDateSwitcher();
+    this.updateGroupKeyBadge();
 
     const gasInput = document.getElementById("gas-api-url");
     if (gasInput && this.gasUrl) {
@@ -406,7 +408,9 @@ class LunchApp {
       return;
     }
     this.groupKey = val;
+    this.isKeyValid = null;
     localStorage.setItem("lunch_app_group_key", val);
+    this.updateGroupKeyBadge();
     this.closeGroupKeyModal();
     this.showToast("✅ 已儲存群組通行碼！正在重新同步...");
     if (this.gasUrl) {
@@ -719,6 +723,12 @@ class LunchApp {
       return;
     }
 
+    if (this.gasUrl && (!this.groupKey || this.isKeyValid === false)) {
+      this.showToast("⚠️ 請先設定或輸入正確的群組通行碼才可送出訂單！");
+      this.showGroupKeyModal();
+      return;
+    }
+
     const dateCheck = checkDateOrderable(this.currentSelectedDate);
     if (!dateCheck.orderable) {
       this.showToast(`⚠️ 無法送出：${dateCheck.reason}`);
@@ -791,6 +801,12 @@ class LunchApp {
   async submitCustomOrder() {
     if (!this.currentUser) {
       this.showLoginModal();
+      return;
+    }
+
+    if (this.gasUrl && (!this.groupKey || this.isKeyValid === false)) {
+      this.showToast("⚠️ 請先設定或輸入正確的群組通行碼才可送出訂單！");
+      this.showGroupKeyModal();
       return;
     }
 
@@ -1453,6 +1469,12 @@ class LunchApp {
   }
 
   async submitTopUp() {
+    if (this.gasUrl && (!this.groupKey || this.isKeyValid === false)) {
+      this.showToast("⚠️ 請先設定或輸入正確的群組通行碼才可申請儲值！");
+      this.showGroupKeyModal();
+      return;
+    }
+
     const uInput = document.getElementById("topup-username-input");
     const aInput = document.getElementById("topup-amount-input");
     const nInput = document.getElementById("topup-note-input");
@@ -1563,11 +1585,15 @@ class LunchApp {
       const res = await fetch(`${this.gasUrl}?action=getInitData&date=${this.currentSelectedDate}&key=${encodeURIComponent(this.groupKey || DEFAULT_GROUP_KEY)}&_t=${Date.now()}`);
       const data = await res.json();
       if (data.code === "UNAUTHORIZED") {
+        this.isKeyValid = false;
+        this.updateGroupKeyBadge();
         this.showGroupKeyModal();
-        this.showToast("⚠️ 群組通行碼無效或未驗證，請輸入正確暗號");
+        this.showToast("⚠️ 群組通行碼無效或未驗證，請點擊上方按鈕輸入暗號！");
         return;
       }
       if (data.status === "success") {
+        this.isKeyValid = true;
+        this.updateGroupKeyBadge();
         if (data.menu && data.menu.length > 0) this.menu = data.menu;
         if (data.schedule) {
           this.schedule = data.schedule;
